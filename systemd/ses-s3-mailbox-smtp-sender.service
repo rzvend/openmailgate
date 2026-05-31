@@ -1,0 +1,16 @@
+[Unit]
+Description=SES S3 Mailbox Local SMTP Sender
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ricardo
+WorkingDirectory=/home/ricardo/ses-s3-mailbox
+ExecStart=/usr/bin/python3 -m sender.smtp_server
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

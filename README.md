@@ -32,26 +32,35 @@ ses-s3-mailbox/
 ├── requirements.txt
 ├── README.md
 ├── scripts/
-│   ├── setup_sqs_s3_notifications.sh    # configura SQS policy + S3 notification
-│   └── install_sqs_worker_systemd.sh    # instala serviço systemd
+│   ├── setup_sqs_s3_notifications.sh       # configura SQS policy + S3 notification
+│   ├── install_sqs_worker_systemd.sh       # instala serviço SQS
+│   └── install_smtp_sender_systemd.sh      # instala serviço SMTP sender
 ├── systemd/
-│   └── ses-s3-mailbox-sqs-worker.service
+│   ├── ses-s3-mailbox-sqs-worker.service
+│   └── ses-s3-mailbox-smtp-sender.service
+├── sender/
+│   ├── __init__.py
+│   ├── config.py          # configuração SMTP/SES
+│   ├── smtp_server.py     # servidor SMTP local (aiosmtpd)
+│   ├── ses_relay.py       # relay via SES SMTP (smtplib)
+│   └── store.py           # Maildir .Sent + SQLite outbound
 ├── worker/
 │   ├── __init__.py
-│   ├── worker.py         # modo polling S3 (fallback)
-│   ├── sqs_worker.py     # daemon SQS long polling (produção)
-│   └── migrate.py        # migração do SQLite
+│   ├── worker.py          # modo polling S3 (fallback)
+│   ├── sqs_worker.py      # daemon SQS long polling (produção)
+│   └── migrate.py         # migração do SQLite
 ├── data/
-│   ├── mailbox.db        # SQLite (não versionado)
-│   ├── raw-emails/       # e-mails brutos (não versionado)
-│   └── maildir/          # Maildir do Dovecot (não versionado)
-└── terraform/            # infraestrutura AWS
+│   ├── mailbox.db         # SQLite (não versionado)
+│   ├── raw-emails/        # e-mails inbound brutos (não versionado)
+│   ├── raw-outbound/      # e-mails outbound brutos (não versionado)
+│   └── maildir/           # Maildir do Dovecot (não versionado)
+└── terraform/             # infraestrutura AWS
 ```
 
 ## Pré-requisitos
 
 - Python 3.11+
-- boto3, python-dotenv (`pip install -r requirements.txt`)
+- boto3, python-dotenv, aiosmtpd (`pip install -r requirements.txt`)
 - AWS credentials configuradas (`aws configure` ou IAM Role)
 - Dovecot instalado e apontando para `data/maildir/master/`
 
@@ -68,6 +77,9 @@ ses-s3-mailbox/
 - `sqs:DeleteMessage`
 - `sqs:GetQueueAttributes`
 - `sqs:ChangeMessageVisibility`
+
+**SES** (envio outbound):
+- `ses:SendRawEmail`
 
 ## Configuração
 
@@ -287,3 +299,153 @@ aws s3 ls s3://ricardo-vc-ses-mailbox/failed/ --recursive
 5. SQS message deletada após todos os registros processados
 6. Em caso de erro transiente, mensagem volta para fila após visibility timeout
 7. Dovecot lê o Maildir → Thunderbird acessa via IMAP
+
+## Outbound SMTP mode
+
+Envio de e-mails via SMTP local → relay SES → cópia local em `.Sent` + SQLite.
+
+```
+Thunderbird
+    ↓
+SMTP local (sender/smtp_server.py) na porta 2525
+    ↓
+relay via Amazon SES SMTP (email-smtp.us-east-1.amazonaws.com:587)
+    ↓
+destinatário externo
+    ↓
+cópia local: data/raw-outbound/ + data/maildir/master/.Sent/ + SQLite
+```
+
+### 1. Credenciais SES SMTP
+
+As credenciais SMTP do SES **não são** as mesmas da AWS CLI. Gerar em:
+**AWS Console → SES → SMTP Settings → Create SMTP Credentials**.
+
+Configurar no `.env`:
+
+```env
+SES_SMTP_USERNAME=AKIA...       # IAM user com permissão ses:SendRawEmail
+SES_SMTP_PASSWORD=BM...          # senha SMTP (não Access Key)
+SES_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+SES_SMTP_PORT=587
+SES_SMTP_STARTTLS=true
+```
+
+### 2. Domínio/remetente verificado
+
+- O domínio `inbox.ricardo.vc` deve estar verificado no SES.
+- Se a conta SES estiver em **sandbox**, só pode enviar para destinatários verificados.
+- O `From:` do e-mail e o envelope `MAIL FROM` devem ser de um domínio/identidade verificada.
+
+### 3. DKIM e DMARC (entregabilidade)
+
+O SES aceita o relay mesmo sem DKIM próprio, mas provedores como Gmail aplicam **DMARC** e rejeitam e-mails sem assinatura DKIM alinhada ao domínio do `From:`.
+
+```
+From: teste@inbox.ricardo.vc
+DKIM: d=amazonses.com       ← não alinhado → rejeitado pelo Gmail
+DKIM: d=inbox.ricardo.vc    ← alinhado       → aceito
+```
+
+Erro comum sem DKIM:
+
+```
+550-5.7.26 Unauthenticated email from ricardo.vc is not accepted
+due to domain's DMARC policy.
+```
+
+O Terraform já inclui Easy DKIM (`aws_ses_domain_dkim`) e publica os 3 registros CNAME no Cloudflare:
+
+```bash
+cd terraform && terraform apply
+aws ses get-identity-dkim-attributes --identities inbox.ricardo.vc --region us-east-1
+# Esperado: DkimVerificationStatus = Success
+```
+
+### 4. Iniciar SMTP sender manualmente
+
+```bash
+python3 -m sender.smtp_server
+```
+
+### 5. Instalar como serviço systemd
+
+```bash
+bash scripts/install_smtp_sender_systemd.sh
+```
+
+### 6. Configurar Thunderbird
+
+```
+Servidor SMTP: <IP da VM>
+Porta: 2525
+Segurança: Nenhuma (STARTTLS opcional futuro)
+Autenticação: Nenhuma (controle por IP)
+```
+
+### 7. Segurança
+
+- A porta 2525 **não deve ser exposta à internet**.
+- Apenas IPs na variável `LOCAL_SMTP_ALLOWED_NETWORKS` podem conectar.
+- Configuração padrão: `127.0.0.1/32,10.10.10.0/24,100.64.0.0/10` (localhost + Tailscale).
+- Autenticação SMTP pode ser implementada futuramente.
+
+### 8. Verificar envio
+
+**Logs:**
+```bash
+journalctl -u ses-s3-mailbox-smtp-sender -f
+```
+
+**SQLite:**
+```bash
+sqlite3 data/mailbox.db "SELECT id, sender, recipient, subject, direction, status, sent_at FROM messages WHERE direction='outbound' ORDER BY id DESC LIMIT 5;"
+```
+
+**Maildir Sent:**
+```bash
+ls -la data/maildir/master/.Sent/cur/
+```
+
+**Porta:**
+```bash
+ss -lntp | grep 2525
+```
+
+### 9. Fluxo de falha
+
+Se o relay SES falhar (credenciais inválidas, rede, etc):
+
+- O e-mail é salvo em `data/raw-outbound/` mesmo assim
+- O status no SQLite é `failed` com `error_message`
+- O cliente SMTP recebe erro `550`
+- O e-mail **não** é entregue ao destinatário
+
+## Sent deduplication
+
+O backend (`sender/store.py`) salva uma cópia de cada e-mail enviado em `.Sent/cur/`. O Thunderbird também salva uma cópia via IMAP/Dovecot ao enviar. Isso gera duas cópias do mesmo e-mail na pasta de enviados.
+
+O deduplicador resolve isso automaticamente por `Message-ID`:
+
+- Mantém a cópia registrada no SQLite (`local_maildir_path`)
+- Move as duplicatas para `.SentDuplicates/cur/` (quarentena, nunca apaga)
+
+### Rodar manualmente
+
+```bash
+python3 -m sender.dedupe_sent
+```
+
+### Instalar timer automático (a cada 2 min)
+
+```bash
+bash scripts/install_sent_dedupe_systemd.sh
+```
+
+### Verificar
+
+```bash
+journalctl -u ses-s3-mailbox-sent-dedupe.service -n 10 --no-pager
+find data/maildir/master/.Sent/cur -type f
+find data/maildir/master/.SentDuplicates -type f
+```

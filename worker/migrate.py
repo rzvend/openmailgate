@@ -21,6 +21,9 @@ NEW_COLUMNS = [
     ("direction", "TEXT DEFAULT 'inbound'"),
     ("status", "TEXT DEFAULT 'processed'"),
     ("error_message", "TEXT"),
+    ("smtp_message_id", "TEXT"),
+    ("sent_at", "TEXT"),
+    ("relay_response", "TEXT"),
 ]
 
 

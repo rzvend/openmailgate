@@ -103,9 +103,9 @@ resource "aws_ses_active_receipt_rule_set" "main" {
 resource "aws_ses_receipt_rule" "store_in_s3" {
   name          = "store-in-s3"
   rule_set_name = aws_ses_receipt_rule_set.main.rule_set_name
-  recipients   = [var.domain]
-  enabled      = true
-  scan_enabled = true
+  recipients    = [var.domain]
+  enabled       = true
+  scan_enabled  = true
 
   s3_action {
     bucket_name       = aws_s3_bucket.mail_bucket.bucket
@@ -129,6 +129,21 @@ resource "cloudflare_dns_record" "mx_inbox" {
   type     = "MX"
   content  = "inbound-smtp.us-east-1.amazonaws.com"
   priority = 10
+  ttl      = 300
+  proxied  = false
+}
+
+# ── Easy DKIM — sign outgoing mail with the domain's own DKIM key ────────
+resource "aws_ses_domain_dkim" "domain" {
+  domain = aws_ses_domain_identity.domain.domain
+}
+
+resource "cloudflare_dns_record" "ses_dkim" {
+  count    = 3
+  zone_id  = var.cloudflare_zone_id
+  name     = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}._domainkey.inbox"
+  type     = "CNAME"
+  content  = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}.dkim.amazonses.com"
   ttl      = 300
   proxied  = false
 }

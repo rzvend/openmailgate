@@ -1,0 +1,10 @@
+[Unit]
+Description=SES S3 Mailbox Sent Maildir Deduplicator
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ricardo
+WorkingDirectory=/home/ricardo/ses-s3-mailbox
+ExecStart=/usr/bin/python3 -m sender.dedupe_sent
+Environment=PYTHONUNBUFFERED=1

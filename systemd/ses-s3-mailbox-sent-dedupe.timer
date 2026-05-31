@@ -1,0 +1,10 @@
+[Unit]
+Description=Run SES S3 Mailbox Sent Deduplicator periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=ses-s3-mailbox-sent-dedupe.service
+
+[Install]
+WantedBy=timers.target

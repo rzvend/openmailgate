@@ -8,4 +8,7 @@
 __pycache__/
 maildir/
 data/raw-emails/
+data/raw-outbound/
 data/mailbox.db
+terraform/tfplan
+*.tfplan
