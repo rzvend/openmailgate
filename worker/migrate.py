@@ -29,6 +29,7 @@ NEW_COLUMNS = [
     ("diagnostic_code", "TEXT"),
     ("bounced_at", "TEXT"),
     ("delivered_at", "TEXT"),
+    ("mailbox_id", "INTEGER"),
 ]
 
 
@@ -117,6 +118,81 @@ def main():
     conn.commit()
     print("Ensured message_events table exists.")
     conn.close()
+
+    # ── multi-mailbox tables ──────────────────────────────────────────
+    conn = sqlite3.connect(str(db))
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mailboxes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            maildir_path TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT
+        )
+    """)
+    print("Ensured mailboxes table exists.")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS email_addresses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mailbox_id INTEGER NOT NULL,
+            address TEXT NOT NULL UNIQUE,
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT,
+            FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id)
+        )
+    """)
+    print("Ensured email_addresses table exists.")
+
+    # ── seed master mailbox ───────────────────────────────────────────
+    import os
+    master_maildir = os.getenv(
+        "MASTER_MAILDIR",
+        str(Path.home() / "ses-s3-mailbox" / "data" / "maildir" / "master"),
+    )
+    row = conn.execute(
+        "SELECT id FROM mailboxes WHERE slug = ?", ("master",)
+    ).fetchone()
+    if row:
+        master_id = row[0]
+        print(f"  - master mailbox already exists (id={master_id})")
+    else:
+        cur = conn.execute(
+            "INSERT INTO mailboxes (name, slug, maildir_path) VALUES (?, ?, ?)",
+            ("Master", "master", master_maildir),
+        )
+        master_id = cur.lastrowid
+        print(f"  + created master mailbox (id={master_id}, path={master_maildir})")
+
+    # ── seed default address ──────────────────────────────────────────
+    default_addr = "teste@inbox.ricardo.vc"
+    row = conn.execute(
+        "SELECT id FROM email_addresses WHERE address = ?", (default_addr,)
+    ).fetchone()
+    if row:
+        print(f"  - default address already exists ({default_addr})")
+    else:
+        conn.execute(
+            "INSERT INTO email_addresses (mailbox_id, address, is_primary, is_active) VALUES (?, ?, 1, 1)",
+            (master_id, default_addr),
+        )
+        print(f"  + linked {default_addr} → master mailbox (id={master_id})")
+
+    # ── backfill existing messages with NULL mailbox_id ───────────────
+    updated = conn.execute(
+        "UPDATE messages SET mailbox_id = ? WHERE mailbox_id IS NULL", (master_id,)
+    ).rowcount
+    if updated:
+        print(f"Backfilled {updated} existing message(s) with mailbox_id={master_id}")
+
+    conn.commit()
+    conn.close()
+    print("Multi-mailbox migration complete.")
 
 
 if __name__ == "__main__":

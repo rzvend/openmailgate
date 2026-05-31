@@ -27,6 +27,14 @@ try:
 except ImportError:
     _BOUNCE_AVAILABLE = False
 
+# Mailbox resolution for inbound messages
+try:
+    from worker.mailbox_resolver import resolve_mailbox_for_inbound
+
+    _MULTI_MAILBOX = True
+except ImportError:
+    _MULTI_MAILBOX = False
+
 # ---------------------------------------------------------------------------
 # Load .env (optional — falls back to os.environ)
 # ---------------------------------------------------------------------------
@@ -144,11 +152,12 @@ INSERT_COLUMNS = [
     "status",
     "error_message",
     "processed_at",
+    "mailbox_id",
 ]
 
 
 def save_metadata(s3_key, raw_path, maildir_path, headers, obj_meta,
-                  status, error_message):
+                  status, error_message, mailbox_id=None):
     h = headers or {}
     m = obj_meta or {}
 
@@ -175,6 +184,7 @@ def save_metadata(s3_key, raw_path, maildir_path, headers, obj_meta,
         status,
         (error_message or "")[:500],
         datetime.now(timezone.utc).isoformat(),
+        mailbox_id,
     ]
 
     assert len(INSERT_COLUMNS) == len(values), (
@@ -311,6 +321,22 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
         headers = parse_email_headers(raw_path)
         headers["thread_id"] = compute_thread_id(headers)
 
+        # ── mailbox resolution ────────────────────────────────────
+        mailbox_id = None
+        mailbox_slug = "master"
+        if _MULTI_MAILBOX:
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                mailbox_id, mailbox_slug = resolve_mailbox_for_inbound(conn, headers)
+            except Exception:
+                log("WARN", "Mailbox resolution failed; falling back to master")
+            finally:
+                conn.close()
+        if mailbox_slug == "master":
+            log("INFO", f"Resolved inbound mailbox: master for recipient {headers.get('recipient')}")
+        else:
+            log("INFO", f"Resolved inbound mailbox: {mailbox_slug} for recipient {headers.get('recipient')}")
+
         shutil.copy2(raw_path, maildir_path)
 
         save_metadata(
@@ -321,6 +347,7 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
             obj_meta=obj_meta,
             status="processed",
             error_message=None,
+            mailbox_id=mailbox_id,
         )
 
         move_s3_object(s3, s3_key, S3_PROCESSED_PREFIX)
@@ -358,6 +385,16 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
         traceback.print_exc(file=sys.stderr)
 
         try:
+            # Try to resolve mailbox even on error
+            err_mailbox_id = None
+            if _MULTI_MAILBOX and headers:
+                try:
+                    err_conn = sqlite3.connect(str(DB_PATH))
+                    err_mailbox_id, _ = resolve_mailbox_for_inbound(err_conn, headers)
+                    err_conn.close()
+                except Exception:
+                    pass
+
             save_metadata(
                 s3_key=s3_key,
                 raw_path=raw_path if raw_path.exists() else None,
@@ -366,6 +403,7 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
                 obj_meta=obj_meta,
                 status="failed",
                 error_message=error_msg,
+                mailbox_id=err_mailbox_id,
             )
         except Exception as meta_exc:
             log("ERROR", f"  Could not save error metadata: {meta_exc}")

@@ -32,6 +32,14 @@ from sender.config import (  # noqa: E402
 from sender.ses_relay import relay_via_ses  # noqa: E402
 from sender.store import save_outbound      # noqa: E402
 
+# Mailbox resolution for outbound messages
+try:
+    from worker.mailbox_resolver import resolve_mailbox_for_outbound
+
+    _MULTI_MAILBOX = True
+except ImportError:
+    _MULTI_MAILBOX = False
+
 
 def compute_thread_id(message_id, in_reply_to, references):
     """Same thread-id logic as the inbound worker."""
@@ -83,6 +91,19 @@ class OutboundHandler:
 
         # ── save local copy ──────────────────────────────────────────
         status = "accepted_by_ses" if ok else "failed"
+        mailbox_id = None
+        if _MULTI_MAILBOX:
+            import sqlite3
+            from sender.config import DB_PATH
+
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                mailbox_id, mailbox_slug = resolve_mailbox_for_outbound(conn, mail_from)
+                log("INFO", f"Resolved outbound mailbox: {mailbox_slug} for sender {mail_from}")
+            except Exception:
+                log("WARN", "Mailbox resolution failed for outbound; falling back to master")
+            finally:
+                conn.close()
         try:
             save_outbound(
                 raw_bytes=raw_bytes,
@@ -99,6 +120,7 @@ class OutboundHandler:
                 status=status,
                 error_message=None if ok else response,
                 relay_response=response,
+                mailbox_id=mailbox_id,
             )
         except Exception as exc:
             log("ERROR", f"Failed to save outbound copy: {exc}")

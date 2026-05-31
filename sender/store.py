@@ -53,6 +53,7 @@ OUTBOUND_COLUMNS = [
     "smtp_message_id",
     "sent_at",
     "relay_response",
+    "mailbox_id",
 ]
 
 
@@ -72,6 +73,7 @@ def save_outbound(
     error_message=None,
     relay_response=None,
     smtp_message_id=None,
+    mailbox_id=None,
 ):
     ensure_sent_dirs()
 
@@ -119,6 +121,7 @@ def save_outbound(
         smtp_message_id,
         ts_str,                 # sent_at
         relay_response,
+        mailbox_id,
     ]
 
     assert len(OUTBOUND_COLUMNS) == len(values), (
