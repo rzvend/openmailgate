@@ -449,3 +449,35 @@ journalctl -u ses-s3-mailbox-sent-dedupe.service -n 10 --no-pager
 find data/maildir/master/.Sent/cur -type f
 find data/maildir/master/.SentDuplicates -type f
 ```
+
+## Delivery status tracking
+
+O SES aceitar o relay (`status = accepted_by_ses`) não garante entrega final. O servidor de destino pode rejeitar após aceitar a conexão (ex: DMARC, spam, caixa cheia). Nesse caso o SES envia um bounce/DSN de volta.
+
+O worker inbound detecta bounces automaticamente e atualiza o outbound original:
+
+| status | significado |
+|---|---|
+| `accepted_by_ses` | SES aceitou o relay SMTP |
+| `bounced` | destinatário/servidor remoto rejeitou |
+| `failed` | falha local antes do SES aceitar |
+| `delivered` | (futuro) entrega confirmada via SES events |
+| `complaint` | (futuro) reclamação de spam |
+
+### Como funciona
+
+1. E-mail de bounce chega via SES Receiving → S3 → SQS → worker
+2. `worker/bounce.py` parseia o `message/delivery-status` e extrai:
+   - `Final-Recipient`, `Action`, `Status`, `Diagnostic-Code`
+   - `Message-ID`, `From`, `Subject` do original (via `message/rfc822`)
+3. Localiza o outbound original no SQLite (por subject + recipient)
+4. Atualiza `status = bounced`, `delivery_action`, `delivery_status`, `diagnostic_code`, `bounced_at`
+5. Insere linha em `message_events` para auditoria
+6. O bounce inbound continua salvo normalmente no Maildir
+
+### Verificar
+
+```bash
+sqlite3 data/mailbox.db "SELECT id, recipient, subject, status, delivery_status, bounced_at FROM messages WHERE status='bounced';"
+sqlite3 data/mailbox.db "SELECT * FROM message_events WHERE event_type='bounce' ORDER BY id DESC LIMIT 3;"
+```

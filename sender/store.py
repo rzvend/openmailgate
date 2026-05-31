@@ -68,7 +68,7 @@ def save_outbound(
     thread_id="",
     cc="",
     bcc="",
-    status="sent",
+    status="accepted_by_ses",
     error_message=None,
     relay_response=None,
     smtp_message_id=None,
@@ -113,7 +113,7 @@ def save_outbound(
         size,                   # object_size
         None,                   # s3_last_modified
         "outbound",             # direction
-        status,                 # status (sent / failed)
+        status,                  # status (accepted_by_ses / failed)
         (error_message or "")[:500],
         ts_str,                 # processed_at
         smtp_message_id,

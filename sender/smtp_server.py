@@ -82,7 +82,7 @@ class OutboundHandler:
         )
 
         # ── save local copy ──────────────────────────────────────────
-        status = "sent" if ok else "failed"
+        status = "accepted_by_ses" if ok else "failed"
         try:
             save_outbound(
                 raw_bytes=raw_bytes,

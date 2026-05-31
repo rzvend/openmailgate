@@ -19,6 +19,14 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
+# Relative import for bounce detection
+try:
+    from worker.bounce import parse_dsn, apply_bounce
+
+    _BOUNCE_AVAILABLE = True
+except ImportError:
+    _BOUNCE_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Load .env (optional — falls back to os.environ)
 # ---------------------------------------------------------------------------
@@ -316,6 +324,24 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
         )
 
         move_s3_object(s3, s3_key, S3_PROCESSED_PREFIX)
+
+        # ── bounce / DSN detection ────────────────────────────────
+        if _BOUNCE_AVAILABLE:
+            try:
+                import email
+                from email import policy as _policy
+                from email.parser import BytesParser as _BytesParser
+
+                with open(raw_path, "rb") as _f:
+                    _msg = _BytesParser(policy=_policy.default).parse(_f)
+                _bounce = parse_dsn(_msg)
+                if _bounce:
+                    log("INFO", f"DSN/bounce detected: action={_bounce.get('action')} "
+                        f"recipient={_bounce.get('final_recipient')} "
+                        f"status={_bounce.get('status')}")
+                    apply_bounce(_bounce, inbound_s3_key=s3_key)
+            except Exception as _bounce_exc:
+                log("WARN", f"Bounce processing error (non-fatal): {_bounce_exc}")
 
         log("INFO", f"OK  {s3_key}")
         log("INFO", f"    From:    {headers.get('sender')}")

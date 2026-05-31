@@ -24,6 +24,11 @@ NEW_COLUMNS = [
     ("smtp_message_id", "TEXT"),
     ("sent_at", "TEXT"),
     ("relay_response", "TEXT"),
+    ("delivery_status", "TEXT"),
+    ("delivery_action", "TEXT"),
+    ("diagnostic_code", "TEXT"),
+    ("bounced_at", "TEXT"),
+    ("delivered_at", "TEXT"),
 ]
 
 
@@ -88,6 +93,30 @@ def main():
 
     conn.close()
     print(f"\nDone — {added} column(s) added.")
+
+    # ── message_events table ──────────────────────────────────────────
+    conn = sqlite3.connect(str(db))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS message_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER,
+            event_type TEXT NOT NULL,
+            event_time TEXT NOT NULL,
+            source TEXT,
+            final_recipient TEXT,
+            action TEXT,
+            status_code TEXT,
+            diagnostic_code TEXT,
+            related_message_id TEXT,
+            raw_message_id TEXT,
+            metadata_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(message_id) REFERENCES messages(id)
+        )
+    """)
+    conn.commit()
+    print("Ensured message_events table exists.")
+    conn.close()
 
 
 if __name__ == "__main__":
