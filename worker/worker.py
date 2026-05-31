@@ -259,36 +259,44 @@ def make_safe_filename(s3_key):
 # ---------------------------------------------------------------------------
 # Core processing
 # ---------------------------------------------------------------------------
-def process_one(s3, obj):
-    s3_key = obj["Key"]
+def process_s3_object(s3, s3_key, size=None, last_modified=None):
+    """Download and deliver a single S3 object.
 
+    Returns:
+        "processed" — success, moved to processed/
+        "skipped"   — directory marker, setup notification, or already done
+        "failed"    — error handled, moved to failed/
+
+    Raises on transient errors (e.g. cannot move to failed/ → retry).
+    """
     if s3_key.endswith("/"):
         log("INFO", f"Skipping directory marker: {s3_key}")
-        return
+        return "skipped"
 
     if s3_key == SETUP_NOTIFICATION_KEY:
         log("INFO", f"Ignoring setup notification: {s3_key}")
-        return
+        return "skipped"
 
     if already_processed(s3_key):
         log("INFO", f"Already processed: {s3_key}")
-        return
+        return "skipped"
 
     filename = make_safe_filename(s3_key)
     raw_path = RAW_DIR / filename
     maildir_path = MAILDIR_NEW / filename
 
+    if last_modified and hasattr(last_modified, "isoformat"):
+        last_modified = last_modified.isoformat()
+
     obj_meta = {
-        "size": obj.get("Size"),
-        "last_modified": obj["LastModified"].isoformat()
-        if obj.get("LastModified")
-        else None,
+        "size": size,
+        "last_modified": last_modified,
     }
 
     headers = None
 
     try:
-        log("INFO", f"Downloading: {s3_key} ({obj_meta['size']} bytes)")
+        log("INFO", f"Downloading: {s3_key} ({size} bytes)")
 
         s3.download_file(S3_BUCKET, s3_key, str(raw_path))
 
@@ -316,7 +324,7 @@ def process_one(s3, obj):
         log("INFO", f"    Thread:  {headers.get('thread_id')}")
         log("INFO", f"    Spam:    {headers.get('ses_spam_verdict')}")
         log("INFO", f"    Virus:   {headers.get('ses_virus_verdict')}")
-        return True
+        return "processed"
 
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
@@ -336,12 +344,19 @@ def process_one(s3, obj):
         except Exception as meta_exc:
             log("ERROR", f"  Could not save error metadata: {meta_exc}")
 
-        try:
-            move_s3_object(s3, s3_key, S3_FAILED_PREFIX)
-        except Exception as move_exc:
-            log("ERROR", f"  Could not move to failed/: {move_exc}")
+        # Move to failed/ — if this fails let it propagate (transient error)
+        move_s3_object(s3, s3_key, S3_FAILED_PREFIX)
+        return "failed"
 
-        return False
+
+def process_one(s3, obj):
+    """Thin wrapper for S3 polling — unpacks the S3 list_objects_v2 dict."""
+    return process_s3_object(
+        s3,
+        obj["Key"],
+        size=obj.get("Size"),
+        last_modified=obj.get("LastModified"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -389,11 +404,13 @@ def main():
             continue
 
         try:
-            success = process_one(s3, obj)
-            if success:
+            result = process_one(s3, obj)
+            if result == "processed":
                 processed += 1
-            else:
+            elif result == "failed":
                 failed += 1
+            else:
+                skipped += 1
         except Exception:
             failed += 1
 
