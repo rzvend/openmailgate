@@ -27,6 +27,23 @@ def ensure_sent_dirs():
     (SENT_MAILDIR_BASE / "maildirfolder").write_text("")
 
 
+def _resolve_sent_cur(master_id):
+    """Return Path() to .Sent/cur/ for a given mailbox id. Falls back to master."""
+    if master_id == 1:
+        return SENT_CUR
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        row = conn.execute(
+            "SELECT maildir_path FROM mailboxes WHERE id=?", (master_id,)
+        ).fetchone()
+        conn.close()
+        if row:
+            return Path(row[0]) / ".Sent" / "cur"
+    except Exception:
+        pass
+    return SENT_CUR
+
+
 OUTBOUND_COLUMNS = [
     "s3_bucket",
     "s3_key",
@@ -86,9 +103,27 @@ def save_outbound(
     raw_path = RAW_OUTBOUND_DIR / filename
     raw_path.write_bytes(raw_bytes)
 
-    # ── Maildir .Sent ────────────────────────────────────────────────
-    sent_path = SENT_CUR / f"{filename}:2,S"
-    shutil.copy2(raw_path, sent_path)
+    # ── Maildir .Sent (fan-out: target + master_copy) ──────────────
+    sent_paths = {}  # mb_id -> Path
+
+    # Always include master .Sent
+    master_cur = _resolve_sent_cur(master_id=1)
+    master_cur.mkdir(parents=True, exist_ok=True)
+    sent_paths[1] = master_cur / f"{filename}:2,S"
+
+    # If a specific active mailbox other than master is resolved, add it too
+    if mailbox_id and mailbox_id != 1:
+        specific_cur = _resolve_sent_cur(master_id=mailbox_id)
+        if specific_cur != master_cur:
+            specific_cur.mkdir(parents=True, exist_ok=True)
+            sent_paths[mailbox_id] = specific_cur / f"{filename}:2,S"
+
+    # Physical copies
+    for mb_id, path in sent_paths.items():
+        shutil.copy2(raw_path, path)
+
+    # Canonical sent_path: use specific mailbox if available, else master
+    sent_path = sent_paths.get(mailbox_id) if (mailbox_id and mailbox_id in sent_paths) else sent_paths[1]
 
     # ── SQLite ───────────────────────────────────────────────────────
     recipient = ", ".join(rcpt_tos) if rcpt_tos else mail_from
@@ -133,9 +168,30 @@ def save_outbound(
     sql = f"INSERT OR IGNORE INTO messages ({columns_sql}) VALUES ({placeholders})"
 
     conn = sqlite3.connect(str(DB_PATH))
+    msg_id = None
     try:
         conn.execute(sql, values)
         conn.commit()
+
+        # ── message_mailboxes associations ──────────────────────────
+        row = conn.execute(
+            "SELECT id FROM messages WHERE s3_key=?", (s3_key,)
+        ).fetchone()
+        if row:
+            msg_id = row[0]
+            for mb_id in sent_paths:
+                if len(sent_paths) == 1:
+                    role = "target"
+                elif mb_id == 1:
+                    role = "master_copy"
+                else:
+                    role = "target"
+                conn.execute(
+                    "INSERT OR IGNORE INTO message_mailboxes (message_id, mailbox_id, role, maildir_path) VALUES (?, ?, ?, ?)",
+                    (msg_id, mb_id, role, str(sent_paths[mb_id])),
+                )
+                log("INFO", f"Created outbound message_mailboxes: msg={msg_id} mb_id={mb_id} role={role}")
+            conn.commit()
     except Exception as exc:
         log("ERROR", f"Failed to save outbound metadata: {exc}")
     finally:

@@ -29,7 +29,10 @@ except ImportError:
 
 # Mailbox resolution for inbound messages
 try:
-    from worker.mailbox_resolver import resolve_mailbox_for_inbound
+    from worker.mailbox_resolver import (
+        get_master_id,
+        resolve_mailbox_for_inbound,
+    )
 
     _MULTI_MAILBOX = True
 except ImportError:
@@ -321,34 +324,89 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
         headers = parse_email_headers(raw_path)
         headers["thread_id"] = compute_thread_id(headers)
 
-        # ── mailbox resolution ────────────────────────────────────
-        mailbox_id = None
-        mailbox_slug = "master"
-        if _MULTI_MAILBOX:
-            conn = sqlite3.connect(str(DB_PATH))
-            try:
-                mailbox_id, mailbox_slug = resolve_mailbox_for_inbound(conn, headers)
-            except Exception:
-                log("WARN", "Mailbox resolution failed; falling back to master")
-            finally:
-                conn.close()
-        if mailbox_slug == "master":
-            log("INFO", f"Resolved inbound mailbox: master for recipient {headers.get('recipient')}")
-        else:
-            log("INFO", f"Resolved inbound mailbox: {mailbox_slug} for recipient {headers.get('recipient')}")
+        # ── multi-mailbox fan-out ────────────────────────────────
+        target_id = None
+        target_slug = "master"
+        master_id = None
+        destinations = []
 
-        shutil.copy2(raw_path, maildir_path)
+        conn_r = sqlite3.connect(str(DB_PATH)) if _MULTI_MAILBOX else None
+        try:
+            if conn_r:
+                target_id, target_slug = resolve_mailbox_for_inbound(conn_r, headers)
+                master_id = get_master_id(conn_r)
+        except Exception:
+            log("WARN", "Mailbox resolution failed; falling back to master")
+
+        if master_id is None:
+            master_id = target_id or 1
+
+        # Build destination list
+        if target_id is None:
+            destinations.append((master_id, "master", "fallback"))
+            log("INFO", f"Resolved inbound: fallback master (no active mailbox) for recipient {headers.get('recipient')}")
+        elif target_slug == "master":
+            destinations.append((master_id, "master", "target"))
+            log("INFO", f"Resolved inbound: master only for recipient {headers.get('recipient')}")
+        else:
+            destinations.append((target_id, target_slug, "target"))
+            destinations.append((master_id, "master", "master_copy"))
+            log("INFO", f"Resolved inbound: {target_slug} + master for recipient {headers.get('recipient')}")
+
+        # Deliver to each destination Maildir
+        for mb_id, mb_slug, role in destinations:
+            mb_maildir = MAILDIR_NEW
+            if conn_r:
+                row = conn_r.execute(
+                    "SELECT maildir_path FROM mailboxes WHERE id=?", (mb_id,)
+                ).fetchone()
+                if row:
+                    mb_maildir = Path(row[0]) / "new"
+                    mb_maildir.mkdir(parents=True, exist_ok=True)
+            dest_path = mb_maildir / filename
+            shutil.copy2(raw_path, dest_path)
+            log("INFO", f"Saved inbound copy to mailbox {mb_slug}: {dest_path}")
+
+        # Canonical message row (target as primary mailbox_id)
+        canonical_mb_id = target_id if target_id else master_id
+        canonical_dest = destinations[0]
+        canonical_path = str(
+            (Path(conn_r.execute("SELECT maildir_path FROM mailboxes WHERE id=?",
+                                 (canonical_dest[0],)).fetchone()[0])
+             / "new" / filename)
+        ) if conn_r else str(maildir_path)
 
         save_metadata(
             s3_key=s3_key,
             raw_path=raw_path,
-            maildir_path=maildir_path,
+            maildir_path=canonical_path,
             headers=headers,
             obj_meta=obj_meta,
             status="processed",
             error_message=None,
-            mailbox_id=mailbox_id,
+            mailbox_id=canonical_mb_id,
         )
+
+        # Insert message_mailboxes associations
+        if conn_r:
+            row = conn_r.execute(
+                "SELECT id FROM messages WHERE s3_key=?", (s3_key,)
+            ).fetchone()
+            if row:
+                msg_id = row[0]
+                for mb_id, mb_slug, role in destinations:
+                    mb_row = conn_r.execute(
+                        "SELECT maildir_path FROM mailboxes WHERE id=?", (mb_id,)
+                    ).fetchone()
+                    mm_path = str(Path(mb_row[0]) / "new" / filename) if mb_row else ""
+                    conn_r.execute(
+                        "INSERT OR IGNORE INTO message_mailboxes (message_id, mailbox_id, role, maildir_path) VALUES (?, ?, ?, ?)",
+                        (msg_id, mb_id, role, mm_path),
+                    )
+                    log("INFO", f"Created message_mailboxes: msg={msg_id} mb={mb_slug} role={role}")
+                conn_r.commit()
+        if conn_r:
+            conn_r.close()
 
         move_s3_object(s3, s3_key, S3_PROCESSED_PREFIX)
 

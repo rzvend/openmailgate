@@ -190,6 +190,41 @@ def main():
     if updated:
         print(f"Backfilled {updated} existing message(s) with mailbox_id={master_id}")
 
+    # ── message_mailboxes table (fan-out / N:N) ──────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS message_mailboxes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            mailbox_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            maildir_path TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(message_id) REFERENCES messages(id),
+            FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id),
+            UNIQUE(message_id, mailbox_id)
+        )
+    """)
+    print("Ensured message_mailboxes table exists.")
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_mm_message_id
+        ON message_mailboxes(message_id)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_mm_mailbox_id
+        ON message_mailboxes(mailbox_id)
+    """)
+
+    # Backfill: create an association for every existing message
+    backfilled = conn.execute("""
+        INSERT OR IGNORE INTO message_mailboxes (message_id, mailbox_id, role, maildir_path)
+        SELECT id, mailbox_id, 'legacy', local_maildir_path
+        FROM messages
+        WHERE mailbox_id IS NOT NULL
+    """).rowcount
+    if backfilled:
+        print(f"Backfilled {backfilled} message_mailboxes association(s)")
+
     conn.commit()
     conn.close()
     print("Multi-mailbox migration complete.")

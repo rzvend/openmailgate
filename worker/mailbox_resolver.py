@@ -54,10 +54,12 @@ def get_master_id(conn):
 def resolve_mailbox_for_inbound(conn, headers):
     """Walk recipient headers in priority order, return (mailbox_id, slug).
 
-    Falls back to 'master' if no address matches.
+    Returns (None, None) when no active mailbox matches — caller should
+    use master as fallback.  This allows the caller to distinguish a
+    genuine master match from a no-match situation for audit purposes.
     """
     candidates = []
-    for hdr in ("Delivered-To", "Envelope-To", "To"):
+    for hdr in ("Delivered-To", "Envelope-To", "To", "recipient", "delivered_to", "envelope_to", "to"):
         raw = headers.get(hdr, "") if isinstance(headers, dict) else ""
         if raw:
             candidates.append(raw)
@@ -73,7 +75,7 @@ def resolve_mailbox_for_inbound(conn, headers):
             if match:
                 return match
 
-    return get_master_id(conn), "master"
+    return None, None
 
 
 def resolve_mailbox_for_outbound(conn, sender):
