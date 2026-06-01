@@ -1,0 +1,13 @@
+# Exemplo de /etc/dovecot/users — NÃO USAR SENHAS REAIS AQUI
+#
+# Formato:
+#   usuario:{SCHEME}hash:uid:gid::home::userdb_mail=maildir:caminho
+#
+# Gerar hash:  dovecot pw -s SHA512-CRYPT
+# Permissões:  chown root:dovecot /etc/dovecot/users && chmod 640 /etc/dovecot/users
+#
+# Este arquivo é um TEMPLATE.  O arquivo real com senhas NUNCA deve ser
+# versionado no Git.
+
+teste@inbox.ricardo.vc:{SHA512-CRYPT}COLE_O_HASH_AQUI:1000:1000::/home/ricardo::userdb_mail=maildir:/home/ricardo/ses-s3-mailbox/data/maildir/master
+financeiro@inbox.ricardo.vc:{SHA512-CRYPT}COLE_O_HASH_AQUI:1000:1000::/home/ricardo::userdb_mail=maildir:/home/ricardo/ses-s3-mailbox/data/maildir/financeiro

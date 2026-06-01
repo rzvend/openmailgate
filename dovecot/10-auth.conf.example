@@ -1,0 +1,8 @@
+# Trecho relevante de /etc/dovecot/conf.d/10-auth.conf
+#
+# auth-passwdfile.conf.ext DEVE vir antes de auth-system.conf.ext
+# para que usuários virtuais tenham prioridade sobre PAM.
+# PAM (auth-system.conf.ext) continua ativo para o login "ricardo".
+
+!include auth-passwdfile.conf.ext
+!include auth-system.conf.ext

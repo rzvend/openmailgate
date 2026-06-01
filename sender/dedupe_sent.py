@@ -38,15 +38,6 @@ MASTER_MAILDIR = Path(
         str(PROJECT_ROOT / "data" / "maildir" / "master"),
     )
 )
-SENT_BASE = Path(
-    os.getenv("SENT_MAILDIR", str(MASTER_MAILDIR / ".Sent"))
-)
-DUPE_BASE = Path(
-    os.getenv(
-        "SENT_DUPLICATES_MAILDIR",
-        str(MASTER_MAILDIR / ".SentDuplicates"),
-    )
-)
 DB_PATH = Path(
     os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "mailbox.db"))
 )
@@ -70,12 +61,6 @@ def log(level, msg):
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
-def _ensure_dirs():
-    for p in (DUPE_BASE / "cur", DUPE_BASE / "new", DUPE_BASE / "tmp"):
-        p.mkdir(parents=True, exist_ok=True)
-    (DUPE_BASE / "maildirfolder").write_text("")
-
-
 def _is_eml(name):
     """True if this looks like a message file (ends with .eml or has Maildir flags)."""
     return name.endswith(".eml") or ":2," in name
@@ -136,14 +121,15 @@ def _move_to_dupes(src, dupe_dir):
 
 
 # ── main logic ───────────────────────────────────────────────────────────
-def dedupe_sent():
-    _ensure_dirs()
-    registered = _get_registered_paths()
+def _dedupe_one_mailbox(sent_base, dupe_base, registered):
+    """Run deduplication on one mailbox's .Sent folder. Returns (moved, unparseable, no_mid)."""
+    sent_dup_cur = dupe_base / "cur"
+    for p in (sent_dup_cur, dupe_base / "new", dupe_base / "tmp"):
+        p.mkdir(parents=True, exist_ok=True)
+    (dupe_base / "maildirfolder").write_text("")
 
-    files = _list_message_files(SENT_BASE)
-    log("INFO", f"Sent dedupe started — found {len(files)} message file(s)")
+    files = _list_message_files(sent_base)
 
-    # Group by Message-ID (skip messages without one)
     by_mid = {}
     unparseable = 0
     no_mid = 0
@@ -151,11 +137,8 @@ def dedupe_sent():
     for fpath in files:
         mid = _extract_message_id(fpath)
         if mid is None:
-            if mid is False:  # parse error
-                unparseable += 1
-            else:
-                no_mid += 1
-                log("WARN", f"Message without Message-ID: {fpath}")
+            no_mid += 1
+            log("WARN", f"Message without Message-ID: {fpath}")
             continue
         by_mid.setdefault(mid, []).append(fpath)
 
@@ -165,34 +148,72 @@ def dedupe_sent():
         if len(paths) <= 1:
             continue
 
-        log("INFO", f"Found duplicate Message-ID: {mid} ({len(paths)} copies)")
+        log("INFO", f"  Found duplicate Message-ID: {mid} ({len(paths)} copies)")
 
-        # Prefer the copy registered in SQLite
         keep = None
         for p in paths:
             if str(p) in registered:
                 keep = p
                 break
 
-        # Fallback: oldest by mtime
         if keep is None:
             keep = min(paths, key=lambda p: p.stat().st_mtime)
 
-        log("INFO", f"  Keeping: {keep}")
+        log("INFO", f"    Keeping: {keep.name}")
 
         for p in paths:
             if p == keep:
                 continue
-            dest = _move_to_dupes(p, DUPE_BASE / "cur")
-            log("INFO", f"  Moved duplicate: {p.name} → {dest}")
+            dest = _move_to_dupes(p, sent_dup_cur)
+            log("INFO", f"    Moved duplicate: {p.name} → {dest}")
 
         moved += len(paths) - 1
 
-    summary = f"Sent dedupe finished — {moved} duplicate(s) moved"
-    if unparseable:
-        summary += f", {unparseable} unparseable"
-    if no_mid:
-        summary += f", {no_mid} without Message-ID"
+    return moved, unparseable, no_mid
+
+
+def _get_active_mailbox_sent_dirs():
+    """Return list of (maildir_path, slug) for all active mailboxes."""
+    conn = sqlite3.connect(str(DB_PATH))
+    rows = conn.execute(
+        "SELECT maildir_path, slug FROM mailboxes WHERE is_active=1 ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [(Path(r[0]), r[1]) for r in rows]
+
+
+def dedupe_sent():
+    registered = _get_registered_paths()
+
+    mailboxes = _get_active_mailbox_sent_dirs()
+    if not mailboxes:
+        log("WARN", "No active mailboxes found; using master as fallback")
+        mailboxes = [(MASTER_MAILDIR, "master")]
+
+    total_moved = 0
+    total_unparseable = 0
+    total_no_mid = 0
+    total_files = 0
+
+    for maildir, slug in mailboxes:
+        sent_base = maildir / ".Sent"
+        dupe_base = maildir / ".SentDuplicates"
+        files = _list_message_files(sent_base)
+        log("INFO", f"Dedupe {slug}: .Sent has {len(files)} file(s)")
+        total_files += len(files)
+
+        m, u, n = _dedupe_one_mailbox(sent_base, dupe_base, registered)
+        total_moved += m
+        total_unparseable += u
+        total_no_mid += n
+        if m:
+            log("INFO", f"  → moved {m} duplicate(s) to {slug}/.SentDuplicates")
+
+    summary = f"Sent dedupe finished — {total_files} files, {total_moved} duplicate(s) moved"
+    if total_unparseable:
+        summary += f", {total_unparseable} unparseable"
+    if total_no_mid:
+        summary += f", {total_no_mid} without Message-ID"
     log("INFO", summary)
 
 
