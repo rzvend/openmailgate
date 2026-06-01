@@ -363,6 +363,16 @@ def main():
     p_em = sub.add_parser("enable-mailbox", help="Enable a mailbox")
     p_em.add_argument("slug")
 
+    # sync-imap-users
+    p_sync = sub.add_parser("sync-imap-users", help="Sync Dovecot passwd-file from database")
+    p_sync.add_argument("--users-file", default="/etc/dovecot/users")
+    p_sync.add_argument("--output", default=None)
+    p_sync.add_argument("--dry-run", action="store_true")
+    p_sync.add_argument("--apply", action="store_true")
+    p_sync.add_argument("--uid", type=int, default=1000)
+    p_sync.add_argument("--gid", type=int, default=1000)
+    p_sync.add_argument("--home", default="/home/ricardo")
+
     args = parser.parse_args()
 
     cmd = args.command
@@ -384,6 +394,10 @@ def main():
         cmd_disable_mailbox(args.slug)
     elif cmd == "enable-mailbox":
         cmd_enable_mailbox(args.slug)
+    elif cmd == "sync-imap-users":
+        from worker.dovecot_users import cmd_sync
+
+        cmd_sync(args, DB_PATH)
     else:
         parser.print_help()
         sys.exit(1)

@@ -82,3 +82,20 @@ User: <email completo> (ex: financeiro@inbox.ricardo.vc)
 - Nunca versionar senhas reais
 - Trocar senhas temporárias após teste
 - PAM preservado — login `ricardo` continua funcionando
+
+## Sincronização automática (CLI)
+
+Gerar usuários a partir do banco:
+
+```bash
+# Visualizar sem alterar
+sudo python3 -m worker.mailbox_admin sync-imap-users --dry-run
+
+# Gerar em arquivo alternativo
+sudo python3 -m worker.mailbox_admin sync-imap-users --output /tmp/dovecot-users
+
+# Aplicar em /etc/dovecot/users (com backup automático)
+sudo python3 -m worker.mailbox_admin sync-imap-users --apply
+```
+
+Usuários com hash preservado são mantidos. Novos endereços ativos sem hash aparecem como pendentes. Usuários inativos são removidos.
