@@ -22,23 +22,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ── load project configuration ───────────────────────────────────────────
+# ── load project configuration ───────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ENV_PATH = PROJECT_ROOT / ".env"
+sys.path.insert(0, str(PROJECT_ROOT))
+from config import DB_PATH as _DB_PATH, MAILDIR_BASE, MASTER_MAILDIR  # noqa: E402
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(ENV_PATH, override=True)
-except ImportError:
-    pass
-
-DB_PATH = Path(
-    os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "mailbox.db"))
-)
-MAILDIR_BASE = Path(
-    os.getenv("MASTER_MAILDIR", str(PROJECT_ROOT / "data" / "maildir" / "master"))
-).parent  # parent = data/maildir
+DB_PATH = _DB_PATH
 
 from worker.mailbox_resolver import normalize_email_address  # noqa: E402
 

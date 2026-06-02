@@ -38,36 +38,24 @@ try:
 except ImportError:
     _MULTI_MAILBOX = False
 
-# ---------------------------------------------------------------------------
-# Load .env (optional — falls back to os.environ)
-# ---------------------------------------------------------------------------
-try:
-    from dotenv import load_dotenv
+# ── Import centralized configuration ──────────────────────────────────────
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except ImportError:
-    pass
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-S3_BUCKET = os.getenv("S3_BUCKET", "ricardo-vc-ses-mailbox")
-S3_INCOMING_PREFIX = os.getenv("S3_INCOMING_PREFIX", "incoming/")
-S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
-S3_FAILED_PREFIX = os.getenv("S3_FAILED_PREFIX", "failed/")
-
-BASE_DIR = Path(os.getenv("BASE_DIR", str(Path.home() / "ses-s3-mailbox")))
-RAW_DIR = BASE_DIR / "data" / "raw-emails"
-DB_PATH = BASE_DIR / "data" / "mailbox.db"
-
-MAILDIR_BASE = os.getenv(
-    "MASTER_MAILDIR",
-    str(BASE_DIR / "data" / "maildir" / "master"),
+from config import (  # noqa: E402
+    AWS_REGION,
+    BASE_DIR,
+    DB_PATH,
+    MAILDIR_NEW,
+    RAW_EMAILS_DIR as RAW_DIR,
+    S3_BUCKET,
+    S3_FAILED_PREFIX,
+    S3_INCOMING_PREFIX,
+    S3_PROCESSED_PREFIX,
+    SETUP_NOTIFICATION_KEY,
 )
-MAILDIR_NEW = Path(MAILDIR_BASE) / "new"
 
-SETUP_NOTIFICATION_KEY = f"{S3_INCOMING_PREFIX.rstrip('/')}/AMAZON_SES_SETUP_NOTIFICATION"
+MAILDIR_BASE = str(MAILDIR_NEW.parent)
 
 
 def ensure_dirs():

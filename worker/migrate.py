@@ -236,6 +236,46 @@ def main():
     if backfilled:
         print(f"Backfilled {backfilled} message_mailboxes association(s)")
 
+    # ── operators and collaboration ───────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS operators (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    print("Ensured operators table exists.")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS operator_mailboxes (
+            operator_id INTEGER NOT NULL,
+            mailbox_id INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'viewer',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (operator_id, mailbox_id),
+            FOREIGN KEY (operator_id) REFERENCES operators(id),
+            FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id)
+        )
+    """)
+    print("Ensured operator_mailboxes table exists.")
+
+    # ── messages workflow columns ──────────────────────────────────────
+    msg_cols = {
+        r[1]
+        for r in conn.execute("PRAGMA table_info('messages')").fetchall()
+    }
+    for col, cdef in [
+        ("assigned_to", "INTEGER REFERENCES operators(id)"),
+        ("internal_status", "TEXT DEFAULT 'open'"),
+    ]:
+        if col not in msg_cols:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {col} {cdef}")
+            print(f"  + added column {col} to messages")
+        else:
+            print(f"  - {col} already exists in messages")
+
     conn.commit()
     conn.close()
     print("Multi-mailbox migration complete.")

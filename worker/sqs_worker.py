@@ -14,30 +14,19 @@ import os
 import sys
 from pathlib import Path
 
-# ── load .env *before* any other project imports ──────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ENV_PATH = PROJECT_ROOT / ".env"
+sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    from dotenv import load_dotenv
-
-    loaded = load_dotenv(ENV_PATH, override=True)
-except ImportError:
-    loaded = False
-    sys.stderr.write(
-        "WARNING: python-dotenv not installed — run: pip install python-dotenv\n"
-    )
-
-if not ENV_PATH.exists():
-    sys.stderr.write(f"WARNING: .env not found at {ENV_PATH}\n")
-
-# ── SQS configuration (read from env now that .env is loaded) ─────────────
-SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL", "")
-SQS_WAIT_TIME = int(os.getenv("SQS_WAIT_TIME_SECONDS", "20"))
-SQS_MAX_MESSAGES = int(os.getenv("SQS_MAX_MESSAGES", "10"))
+from config import (  # noqa: E402
+    AWS_REGION,
+    S3_BUCKET,
+    S3_INCOMING_PREFIX,
+    SQS_QUEUE_URL,
+    SQS_WAIT_TIME,
+    SQS_MAX_MESSAGES,
+)
 
 # ── make worker package importable ────────────────────────────────────────
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import json                      # noqa: E402
 import signal                    # noqa: E402

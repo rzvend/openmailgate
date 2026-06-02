@@ -1,24 +1,16 @@
-"""Mailbox resolution helpers.
-
-Used by both the inbound worker and outbound sender to map email addresses
-to mailbox IDs.  Falls back to the "master" mailbox when no match is found.
-"""
+"""Mailbox resolution helpers."""
 
 import re
 import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DB_PATH  # noqa: E402
 
 
 def _connect():
-    import os
-
-    db_path = Path(
-        os.getenv(
-            "DB_PATH",
-            str(Path.home() / "ses-s3-mailbox" / "data" / "mailbox.db"),
-        )
-    )
-    return sqlite3.connect(str(db_path))
+    return sqlite3.connect(str(DB_PATH))
 
 
 def normalize_email_address(address):

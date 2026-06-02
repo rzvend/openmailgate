@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Deduplicate the .Sent Maildir folder by Message-ID.
-
-When both the backend (sender/store.py) and Thunderbird (via Dovecot/IMAP)
-save a copy of the same sent message, two files end up in .Sent/cur/ with
-the same Message-ID.  This script keeps the copy registered in SQLite (or
-the oldest one otherwise) and moves the rest to .SentDuplicates/cur/ for
-safe quarantine — nothing is ever deleted.
-"""
+"""Deduplicate the .Sent Maildir folder by Message-ID (all mailboxes)."""
 
 import hashlib
 import os
@@ -18,29 +11,10 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
-# Make project imports work from any cwd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load .env
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(PROJECT_ROOT / ".env", override=True)
-except ImportError:
-    pass
-
-
-# ── paths ────────────────────────────────────────────────────────────────
-MASTER_MAILDIR = Path(
-    os.getenv(
-        "MASTER_MAILDIR",
-        str(PROJECT_ROOT / "data" / "maildir" / "master"),
-    )
-)
-DB_PATH = Path(
-    os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "mailbox.db"))
-)
+from config import DB_PATH, MASTER_MAILDIR  # noqa: E402
 
 # ── ignore these Dovecot internal files ──────────────────────────────────
 IGNORE_NAMES = {
