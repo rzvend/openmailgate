@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}IMAP Sync — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>IMAP Sync</h1>
+
+<div class="card">
+    <p>Synchronize Dovecot virtual users from the database to <code>/etc/dovecot/users</code>.</p>
+    <p><strong>Dry-Run</strong> shows what will be generated without modifying any files.</p>
+    <p><strong>Apply</strong> writes the users file (creates a backup automatically).</p>
+    <p class="muted">Dovecot is not restarted automatically. Validate with <code>doveadm user &lt;email&gt;</code>.</p>
+</div>
+
+<div style="margin-bottom: 12px;">
+    <form method="post" action="/dashboard/imap-sync/dry-run" style="display: inline;">
+        <button type="submit" style="padding: 8px 20px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Run Dry-Run</button>
+    </form>
+    <form method="post" action="/dashboard/imap-sync/apply" style="display: inline; margin-left: 8px;">
+        <button type="submit" style="padding: 8px 20px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer;" onclick="return confirm('This will overwrite /etc/dovecot/users. Continue?')">Apply Sync</button>
+    </form>
+</div>
+
+{% if error %}
+<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>
+{% endif %}
+
+{% if warning %}
+<p style="color: #856404; background: #fff3cd; padding: 8px; border-radius: 4px;">{{ warning }}</p>
+{% endif %}
+
+{% if dry_run_done %}
+<div class="card" style="margin-top: 16px;">
+    <p><strong>Summary:</strong> {{ n_kept }} kept, {{ n_pending }} missing, {{ n_removed }} removed</p>
+    {% if n_pending %}
+        <p style="color: #856404; background: #fff3cd; padding: 8px; border-radius: 4px;">
+            Warning: {{ n_pending }} active address(es) have no IMAP password configured. Run Set IMAP Password first.
+        </p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if output %}
+    {% if apply_done %}
+    <div class="card" style="margin-top: 16px; background: #d4edda;">
+        <strong>Apply result:</strong>
+        <pre style="white-space: pre-wrap; font-size: 13px;">{{ output }}</pre>
+    </div>
+    {% elif dry_run_done and output is iterable and output is not string %}
+    <h2 style="margin-top: 20px;">Preview</h2>
+    <table>
+        <thead>
+            <tr><th>Address</th><th>Source</th><th>Hash</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+        {% for row in output %}
+            <tr>
+                <td>{{ row.address }}</td>
+                <td>
+                    {% if row.hash_source == 'from_db' %}
+                        <span class="badge badge-inbound">from_db</span>
+                    {% elif row.hash_source == 'from_file' %}
+                        <span class="badge badge-master_copy">from_file</span>
+                    {% elif row.hash_source == 'missing_hash' %}
+                        <span class="badge badge-inactive">missing</span>
+                    {% else %}
+                        <span class="badge badge-fallback">{{ row.hash_source }}</span>
+                    {% endif %}
+                </td>
+                <td class="muted"><code>{{ row.hash_masked }}</code></td>
+                <td>
+                    {% if row.status == 'keep' %}
+                        <span class="badge badge-active">keep</span>
+                    {% elif row.status == 'missing' %}
+                        <span class="badge badge-inactive">missing</span>
+                    {% else %}
+                        <span class="badge badge-fallback">{{ row.status }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+{% endif %}
+{% endblock %}

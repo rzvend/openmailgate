@@ -1,12 +1,18 @@
 """Dashboard web routes — read-only HTML views."""
 
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-import subprocess
+import worker.dovecot_users as du
 
 from api.auth import require_login
-from config import MAILDIR_BASE
+from config import DB_PATH, MAILDIR_BASE
 from database import (
     create_mailbox_with_address,
     get_email_address,
@@ -196,3 +202,110 @@ def imap_password_set(request: Request, address_id: int,
 
     slug = addr["mailbox_slug"]
     return RedirectResponse(url=f"/dashboard/mailboxes/{slug}", status_code=302)
+
+
+# ── IMAP sync ──────────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/imap-sync")
+def imap_sync_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "imap_sync.html", {"output": None, "error": None}
+    )
+
+
+@router.post("/dashboard/imap-sync/dry-run")
+def imap_sync_dry_run(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    import sqlite3
+
+    warning = None
+    try:
+        existing = du.parse_dovecot_users("/etc/dovecot/users")
+    except (PermissionError, FileNotFoundError) as e:
+        warning = (
+            "Cannot read /etc/dovecot/users — showing database-backed users only. "
+            "Existing file hashes from Dovecot are not compared."
+        )
+        existing = {}
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        lines, hash_source, kept, added, removed, pending = du.generate_entries(
+            conn, existing, uid=1000, gid=1000, home="/home/ricardo"
+        )
+    finally:
+        conn.close()
+
+    # Build preview rows
+    rows = []
+    for addr in sorted(set(list(kept.keys()) + list(pending.keys()))):
+        src = hash_source.get(addr, "missing_hash")
+        if addr in kept:
+            rows.append({
+                "address": addr,
+                "hash_source": src,
+                "hash_masked": du._mask_hash(kept[addr]),
+                "status": "keep",
+            })
+        else:
+            rows.append({
+                "address": addr,
+                "hash_source": src,
+                "hash_masked": "—",
+                "status": "missing",
+            })
+
+    for addr in sorted(removed):
+        rows.append({
+            "address": addr,
+            "hash_source": "removed",
+            "hash_masked": "—",
+            "status": "remove",
+        })
+
+    return request.app.state.templates.TemplateResponse(
+        request, "imap_sync.html",
+        {"output": rows, "error": None, "dry_run_done": True,
+         "n_kept": len(kept), "n_pending": len(pending), "n_removed": len(removed),
+         "warning": warning}
+    )
+
+
+@router.post("/dashboard/imap-sync/apply")
+def imap_sync_apply(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
+    try:
+        result = subprocess.run(
+            ["sudo", str(wrapper)],
+            capture_output=True, text=True, timeout=30, shell=False,
+        )
+        output = result.stdout + result.stderr
+        if result.returncode != 0:
+            return request.app.state.templates.TemplateResponse(
+                request, "imap_sync.html",
+                {"output": output, "error": "Apply failed (exit %d)." % result.returncode}
+            )
+    except FileNotFoundError:
+        return request.app.state.templates.TemplateResponse(
+            request, "imap_sync.html",
+            {"output": "",
+             "error": "sudo not available. Configure sudoers for scripts/sync_imap_users_apply.sh or run manually."}
+        )
+    except Exception as e:
+        return request.app.state.templates.TemplateResponse(
+            request, "imap_sync.html",
+            {"output": "", "error": f"Apply failed: {e}"}
+        )
+
+    return request.app.state.templates.TemplateResponse(
+        request, "imap_sync.html",
+        {"output": output, "error": None, "apply_done": True}
+    )
