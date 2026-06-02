@@ -14,9 +14,11 @@ Usage:
 """
 
 import argparse
+import getpass
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
@@ -319,6 +321,55 @@ def cmd_enable_mailbox(slug):
     print(f"Enabled mailbox: {slug}")
 
 
+def cmd_set_imap_password(email):
+    norm = normalize_email_address(email)
+
+    conn = _conn()
+    row = conn.execute(
+        "SELECT e.id, e.is_active, m.is_active AS mb_active FROM email_addresses e "
+        "JOIN mailboxes m ON m.id = e.mailbox_id WHERE e.address = ?",
+        (norm,),
+    ).fetchone()
+    if not row:
+        _die(f"address not found: {norm}")
+    if not row[1] or not row[2]:
+        _die(f"address or mailbox is inactive: {norm}")
+
+    pw1 = getpass.getpass(f"New IMAP password for {norm}: ")
+    if not pw1:
+        _die("password cannot be empty")
+    pw2 = getpass.getpass("Confirm password: ")
+    if pw1 != pw2:
+        _die("passwords do not match")
+
+    # Use doveadm pw via stdin (secure — never in process args)
+    try:
+        result = subprocess.run(
+            ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+            input=f"{pw1}\n{pw1}",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            _die(f"doveadm pw failed: {result.stderr.strip()}")
+        hashed = result.stdout.strip().split("\n")[-1]
+        if not hashed.startswith("{"):
+            _die(f"unexpected hash output from doveadm pw")
+    except FileNotFoundError:
+        _die("doveadm not found — install dovecot or use a system with dovecot installed")
+    except Exception as exc:
+        _die(f"failed to generate password hash: {exc}")
+
+    conn.execute("UPDATE email_addresses SET imap_password_hash=? WHERE id=?", (hashed, row[0]))
+    conn.commit()
+    conn.close()
+
+    masked = hashed[:25] + "****"
+    print(f"Updated IMAP password for {norm}")
+    print(f"Hash stored: {masked}")
+
+
 # ── argument parser ──────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
@@ -363,6 +414,10 @@ def main():
     p_em = sub.add_parser("enable-mailbox", help="Enable a mailbox")
     p_em.add_argument("slug")
 
+    # set-imap-password
+    p_sp = sub.add_parser("set-imap-password", help="Set IMAP password for an email address")
+    p_sp.add_argument("email")
+
     # sync-imap-users
     p_sync = sub.add_parser("sync-imap-users", help="Sync Dovecot passwd-file from database")
     p_sync.add_argument("--users-file", default="/etc/dovecot/users")
@@ -394,6 +449,8 @@ def main():
         cmd_disable_mailbox(args.slug)
     elif cmd == "enable-mailbox":
         cmd_enable_mailbox(args.slug)
+    elif cmd == "set-imap-password":
+        cmd_set_imap_password(args.email)
     elif cmd == "sync-imap-users":
         from worker.dovecot_users import cmd_sync
 

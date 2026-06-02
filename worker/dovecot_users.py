@@ -43,15 +43,13 @@ def _mask_hash(full_line):
 
 
 def generate_entries(conn, existing_entries, uid, gid, home):
-    """Return (lines, added, kept, removed, pending) based on DB vs existing file.
+    """Return (lines, hash_source, kept, added, removed, pending).
 
-    - kept: users in both DB and file
-    - added: users in DB but not in file (no hash — listed as pending)
-    - removed: users in file but not in DB
-    - pending: users in DB without hash in file
+    hash_source dict maps addr -> 'from_db' | 'from_file'.
+    Priority: DB imap_password_hash > existing file hash > missing.
     """
     rows = conn.execute("""
-        SELECT e.address, m.maildir_path, m.slug
+        SELECT e.address, m.maildir_path, m.slug, e.imap_password_hash
         FROM email_addresses e
         JOIN mailboxes m ON m.id = e.mailbox_id
         WHERE e.is_active = 1 AND m.is_active = 1
@@ -64,12 +62,21 @@ def generate_entries(conn, existing_entries, uid, gid, home):
     added = {}
     pending = {}
     removed = {}
+    hash_source = {}
 
-    for addr, (address, maildir_path, slug) in db_users.items():
-        if addr in existing_entries:
-            kept[addr] = existing_entries[addr]
+    for addr, (address, maildir_path, slug, db_hash) in db_users.items():
+        if db_hash:
+            # Primary: hash from DB
+            kept[addr] = _build_line_from_hash(db_hash, addr, uid, gid, home, maildir_path)
+            hash_source[addr] = "from_db"
+        elif addr in existing_entries:
+            # Fallback: existing file hash
+            kept[addr] = _rebuild_line(existing_entries[addr], uid, gid, home, maildir_path)
+            hash_source[addr] = "from_file"
         else:
+            # No hash anywhere
             pending[addr] = maildir_path
+            hash_source[addr] = "missing_hash"
 
     for addr, line in existing_entries.items():
         if addr not in db_users:
@@ -78,9 +85,25 @@ def generate_entries(conn, existing_entries, uid, gid, home):
     # Build output lines
     lines = {}
     for addr, line in kept.items():
-        lines[addr] = _rebuild_line(line, uid, gid, home, db_users[addr][1])
+        lines[addr] = line
 
-    return lines, kept, added, removed, pending
+    return lines, hash_source, kept, added, removed, pending
+
+
+def _build_line_from_hash(hash_value, user, uid, gid, home, maildir_path):
+    """Build a passwd-file line from a DB hash (no existing file line)."""
+    parts = [
+        user,
+        hash_value,
+        str(uid),
+        str(gid),
+        "",
+        str(home),
+        "",
+        "userdb_mail=maildir",
+        maildir_path,
+    ]
+    return ":".join(parts)
 
 
 def _rebuild_line(existing_line, uid, gid, home, maildir_path):
@@ -156,7 +179,7 @@ def cmd_sync(args, db_path):
         )
         existing = {}
 
-    lines, kept, added, removed, pending = generate_entries(
+    lines, hash_source, kept, added, removed, pending = generate_entries(
         conn, existing, args.uid, args.gid, args.home
     )
     conn.close()
@@ -167,13 +190,16 @@ def cmd_sync(args, db_path):
 
     if args.dry_run:
         print(f"[dry-run] Would keep: {n_kept}")
-        for addr, line in sorted(kept.items()):
-            print(f"  keep  {addr:40s} {_mask_hash(line)}")
+        for addr in sorted(kept):
+            line = kept[addr]
+            src = hash_source.get(addr, "?")
+            print(f"  keep  {addr:40s} hash={src} {_mask_hash(line)}")
         if n_pending:
             print()
-            print(f"[dry-run] Pending (active in DB, no hash in file): {n_pending}")
+            print(f"[dry-run] Pending (set password with set-imap-password): {n_pending}")
             for addr, maildir in sorted(pending.items()):
-                print(f"  NEW   {addr:40s} → {maildir}")
+                print(f"  MISS  {addr:40s} → {maildir}")
+                print(f"        Run: python3 -m worker.mailbox_admin set-imap-password {addr}")
         if n_removed:
             print()
             print(f"[dry-run] Would remove (no longer active): {n_removed}")

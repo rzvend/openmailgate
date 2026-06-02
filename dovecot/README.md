@@ -85,7 +85,19 @@ User: <email completo> (ex: financeiro@inbox.ricardo.vc)
 
 ## Sincronização automática (CLI)
 
-Gerar usuários a partir do banco:
+### Definir senha IMAP (armazenada no banco)
+
+```bash
+python3 -m worker.mailbox_admin set-imap-password compras@inbox.ricardo.vc
+# Solicita senha segura, gera hash SHA512-CRYPT, salva em email_addresses.imap_password_hash
+```
+
+### Gerar usuários a partir do banco
+
+Prioridade de hash:
+1. `email_addresses.imap_password_hash` (`from_db`)
+2. Hash existente em `/etc/dovecot/users` (`from_file`)
+3. Sem hash → `missing_hash` (não gera usuário)
 
 ```bash
 # Visualizar sem alterar
@@ -95,6 +107,14 @@ sudo python3 -m worker.mailbox_admin sync-imap-users --dry-run
 sudo python3 -m worker.mailbox_admin sync-imap-users --output /tmp/dovecot-users
 
 # Aplicar em /etc/dovecot/users (com backup automático)
+sudo python3 -m worker.mailbox_admin sync-imap-users --apply
+```
+
+### Fluxo recomendado para nova mailbox
+
+```bash
+python3 -m worker.mailbox_admin create compras --name "Compras" --address compras@inbox.ricardo.vc
+python3 -m worker.mailbox_admin set-imap-password compras@inbox.ricardo.vc
 sudo python3 -m worker.mailbox_admin sync-imap-users --apply
 ```
 

@@ -149,6 +149,17 @@ def main():
     """)
     print("Ensured email_addresses table exists.")
 
+    # ── email_addresses.imap_password_hash ────────────────────────────
+    ea_cols = {
+        r[1]
+        for r in conn.execute("PRAGMA table_info('email_addresses')").fetchall()
+    }
+    if "imap_password_hash" not in ea_cols:
+        conn.execute("ALTER TABLE email_addresses ADD COLUMN imap_password_hash TEXT")
+        print("  + added column imap_password_hash to email_addresses")
+    else:
+        print("  - imap_password_hash already exists")
+
     # ── seed master mailbox ───────────────────────────────────────────
     import os
     master_maildir = os.getenv(
