@@ -91,3 +91,6 @@ SES_SMTP_PASSWORD = _env("SES_SMTP_PASSWORD", "")
 SES_STARTTLS = _env("SES_SMTP_STARTTLS", "true").lower() == "true"
 
 DEFAULT_FROM_DOMAIN = _env("DEFAULT_FROM_DOMAIN", "inbox.ricardo.vc")
+
+# ── session ──────────────────────────────────────────────────────────────
+SESSION_SECRET = _env("SESSION_SECRET", "dev-change-me-in-production")

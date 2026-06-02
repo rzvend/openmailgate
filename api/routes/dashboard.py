@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
+from api.auth import require_login
 from database import (
     get_mailbox_addresses,
     get_mailbox_by_slug,
@@ -28,6 +29,8 @@ def root():
 
 @router.get("/dashboard")
 def dashboard(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
     boxes = get_mailboxes()
     ops = get_operators()
     result = []
@@ -41,6 +44,8 @@ def dashboard(request: Request):
 
 @router.get("/dashboard/mailboxes/{slug}")
 def dashboard_mailbox(request: Request, slug: str, limit: int = 50, offset: int = 0, direction: str = ""):
+    _auth = require_login(request)
+    if _auth: return _auth
     mb = get_mailbox_by_slug(slug)
     if not mb:
         raise HTTPException(status_code=404, detail="mailbox not found")
@@ -58,6 +63,8 @@ def dashboard_mailbox(request: Request, slug: str, limit: int = 50, offset: int 
 
 @router.get("/dashboard/messages/{message_id}")
 def dashboard_message(request: Request, message_id: int):
+    _auth = require_login(request)
+    if _auth: return _auth
     msg = get_message(message_id)
     if not msg:
         raise HTTPException(status_code=404, detail="message not found")
@@ -75,6 +82,8 @@ def dashboard_message(request: Request, message_id: int):
 
 @router.get("/dashboard/operators")
 def dashboard_operators(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
     ops = get_operators()
     op_mailboxes = {}
     for op in ops:
