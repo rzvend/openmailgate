@@ -359,6 +359,193 @@ def cmd_set_imap_password(email):
     print(f"Hash stored: {masked}")
 
 
+# ── operator commands ────────────────────────────────────────────────────
+
+
+def _gen_hash(password):
+    result = subprocess.run(
+        ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+        input=f"{password}\n{password}",
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        _die(f"doveadm pw failed: {result.stderr.strip()}")
+    hashed = result.stdout.strip().split("\n")[-1]
+    if not hashed.startswith("{"):
+        _die("unexpected hash output from doveadm pw")
+    return hashed
+
+
+def cmd_create_operator(username):
+    username = username.strip().lower()
+    if not username:
+        _die("username cannot be empty")
+    conn = _conn()
+    dup = conn.execute("SELECT id FROM operators WHERE username=?", (username,)).fetchone()
+    if dup:
+        _die(f"operator already exists: {username}")
+    conn.execute("INSERT INTO operators (username, password_hash, is_active) VALUES (?, '', 1)", (username,))
+    op_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.commit()
+    conn.close()
+    print(f"Created operator: {username} (id={op_id})")
+    print(f"Run: python3 -m worker.mailbox_admin set-operator-password {username}")
+
+
+def cmd_set_operator_password(username):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute("SELECT id, is_active FROM operators WHERE username=?", (username,)).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+    if not op[1]:
+        print(f"Warning: operator {username} is inactive")
+
+    pw1 = getpass.getpass(f"New dashboard password for operator {username}: ")
+    if not pw1:
+        _die("password cannot be empty")
+    pw2 = getpass.getpass("Confirm password: ")
+    if pw1 != pw2:
+        _die("passwords do not match")
+
+    hashed = _gen_hash(pw1)
+    conn.execute("UPDATE operators SET password_hash=? WHERE id=?", (hashed, op[0]))
+    conn.commit()
+    conn.close()
+    print(f"Updated dashboard password for operator: {username}")
+    print(f"Hash stored: {hashed[:25]}****")
+
+
+def cmd_list_operators():
+    conn = _conn()
+    rows = conn.execute(
+        """SELECT o.id, o.username, o.is_active, o.created_at,
+                  (SELECT COUNT(*) FROM operator_mailboxes WHERE operator_id=o.id) AS mb_count
+           FROM operators o ORDER BY o.id"""
+    ).fetchall()
+    conn.close()
+    if not rows:
+        print("(no operators)")
+        return
+    print(f"{'ID':<4} {'USERNAME':<20} {'ACTIVE':<7} {'MAILBOXES':<10} CREATED_AT")
+    for r in rows:
+        print(f"{r[0]:<4} {r[1]:<20} {_format_yn(r[2]):<7} {r[4]:<10} {r[3]}")
+
+
+def cmd_show_operator(username):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute(
+        "SELECT id, username, is_active, created_at FROM operators WHERE username=?", (username,)
+    ).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+
+    perms = conn.execute(
+        """SELECT m.slug, m.name, om.role
+           FROM operator_mailboxes om
+           JOIN mailboxes m ON m.id = om.mailbox_id
+           WHERE om.operator_id = ?
+           ORDER BY m.slug""",
+        (op[0],),
+    ).fetchall()
+    conn.close()
+
+    print("Operator:")
+    print(f"  id: {op[0]}")
+    print(f"  username: {op[1]}")
+    print(f"  active: {_format_yn(op[2])}")
+    print(f"  created_at: {op[3]}")
+    print()
+    print("Mailboxes:")
+    if perms:
+        for p in perms:
+            print(f"  {p[0]:<16} role={p[2]}")
+    else:
+        print("  (none)")
+
+
+def cmd_disable_operator(username):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute("SELECT id, is_active FROM operators WHERE username=?", (username,)).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+    if not op[1]:
+        conn.close()
+        print(f"Operator already inactive: {username}")
+        return
+    conn.execute("UPDATE operators SET is_active=0 WHERE id=?", (op[0],))
+    conn.commit()
+    conn.close()
+    print(f"Disabled operator: {username}")
+
+
+def cmd_enable_operator(username):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute("SELECT id, is_active FROM operators WHERE username=?", (username,)).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+    if op[1]:
+        conn.close()
+        print(f"Operator already active: {username}")
+        return
+    conn.execute("UPDATE operators SET is_active=1 WHERE id=?", (op[0],))
+    conn.commit()
+    conn.close()
+    print(f"Enabled operator: {username}")
+
+
+def cmd_grant_mailbox(username, slug, role):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute("SELECT id, is_active FROM operators WHERE username=?", (username,)).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+    if not op[1]:
+        _die(f"operator is inactive: {username}")
+    mb = conn.execute("SELECT id, is_active FROM mailboxes WHERE slug=?", (slug,)).fetchone()
+    if not mb:
+        _die(f"mailbox not found: {slug}")
+    if not mb[1]:
+        _die(f"mailbox is inactive: {slug}")
+
+    conn.execute(
+        """INSERT INTO operator_mailboxes (operator_id, mailbox_id, role)
+           VALUES (?, ?, ?)
+           ON CONFLICT(operator_id, mailbox_id) DO UPDATE SET role=excluded.role""",
+        (op[0], mb[0], role),
+    )
+    conn.commit()
+    conn.close()
+    print(f"Granted {username} role={role} on mailbox {slug}")
+
+
+def cmd_revoke_mailbox(username, slug):
+    username = username.strip().lower()
+    conn = _conn()
+    op = conn.execute("SELECT id FROM operators WHERE username=?", (username,)).fetchone()
+    if not op:
+        _die(f"operator not found: {username}")
+    mb = conn.execute("SELECT id FROM mailboxes WHERE slug=?", (slug,)).fetchone()
+    if not mb:
+        _die(f"mailbox not found: {slug}")
+
+    deleted = conn.execute(
+        "DELETE FROM operator_mailboxes WHERE operator_id=? AND mailbox_id=?",
+        (op[0], mb[0]),
+    ).rowcount
+    conn.commit()
+    conn.close()
+    if deleted:
+        print(f"Revoked {username} access to mailbox {slug}")
+    else:
+        print(f"No grant found: {username} on {slug}")
+
+
 # ── argument parser ──────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
@@ -417,6 +604,26 @@ def main():
     p_sync.add_argument("--gid", type=int, default=1000)
     p_sync.add_argument("--home", default="/home/ricardo")
 
+    # operators
+    p_co = sub.add_parser("create-operator", help="Create a dashboard operator")
+    p_co.add_argument("username")
+    p_spo = sub.add_parser("set-operator-password", help="Set dashboard password for an operator")
+    p_spo.add_argument("username")
+    sub.add_parser("list-operators", help="List dashboard operators")
+    p_so = sub.add_parser("show-operator", help="Show operator details")
+    p_so.add_argument("username")
+    p_do = sub.add_parser("disable-operator", help="Disable a dashboard operator")
+    p_do.add_argument("username")
+    p_eo = sub.add_parser("enable-operator", help="Enable a dashboard operator")
+    p_eo.add_argument("username")
+    p_gm = sub.add_parser("grant-mailbox", help="Grant operator access to a mailbox")
+    p_gm.add_argument("username")
+    p_gm.add_argument("slug")
+    p_gm.add_argument("--role", default="viewer", choices=["viewer", "admin"])
+    p_rm = sub.add_parser("revoke-mailbox", help="Revoke operator access to a mailbox")
+    p_rm.add_argument("username")
+    p_rm.add_argument("slug")
+
     args = parser.parse_args()
 
     cmd = args.command
@@ -444,6 +651,22 @@ def main():
         from worker.dovecot_users import cmd_sync
 
         cmd_sync(args, DB_PATH)
+    elif cmd == "create-operator":
+        cmd_create_operator(args.username)
+    elif cmd == "set-operator-password":
+        cmd_set_operator_password(args.username)
+    elif cmd == "list-operators":
+        cmd_list_operators()
+    elif cmd == "show-operator":
+        cmd_show_operator(args.username)
+    elif cmd == "disable-operator":
+        cmd_disable_operator(args.username)
+    elif cmd == "enable-operator":
+        cmd_enable_operator(args.username)
+    elif cmd == "grant-mailbox":
+        cmd_grant_mailbox(args.username, args.slug, args.role)
+    elif cmd == "revoke-mailbox":
+        cmd_revoke_mailbox(args.username, args.slug)
     else:
         parser.print_help()
         sys.exit(1)
