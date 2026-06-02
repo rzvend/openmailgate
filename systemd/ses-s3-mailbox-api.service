@@ -1,0 +1,17 @@
+[Unit]
+Description=SES S3 Mailbox API and Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ricardo
+Group=ricardo
+WorkingDirectory=/home/ricardo/ses-s3-mailbox
+EnvironmentFile=-/home/ricardo/ses-s3-mailbox/.env
+ExecStart=/usr/bin/python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
