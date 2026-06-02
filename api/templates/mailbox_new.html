@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}New Mailbox — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>New Mailbox</h1>
+
+<form method="post" action="/dashboard/mailboxes/new">
+    <div style="margin-bottom: 12px;">
+        <label for="slug">Slug:</label><br>
+        <input type="text" id="slug" name="slug" required
+               pattern="[a-z0-9_-]+" title="Lowercase letters, numbers, hyphens, underscores"
+               style="padding: 8px; width: 300px;">
+        <br><small class="muted">e.g. suporte</small>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label for="name">Name:</label><br>
+        <input type="text" id="name" name="name" required style="padding: 8px; width: 300px;">
+        <br><small class="muted">e.g. Suporte</small>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label for="address">Primary email address:</label><br>
+        <input type="email" id="address" name="address" required style="padding: 8px; width: 300px;">
+        <br><small class="muted">e.g. suporte@inbox.ricardo.vc</small>
+    </div>
+    {% if error %}
+    <p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>
+    {% endif %}
+    <button type="submit" style="padding: 8px 20px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Create mailbox</button>
+    <a href="/dashboard" class="muted" style="margin-left: 12px;">Cancel</a>
+</form>
+<p class="muted" style="margin-top: 20px;">
+    After creating the mailbox, define an IMAP password and run sync-imap-users.
+</p>
+{% endblock %}

@@ -4,8 +4,10 @@ All modules should use ``get_conn()`` for SQLite connections instead of
 calling ``sqlite3.connect(DB_PATH)`` directly.
 """
 
+import re
 import sqlite3
 import sys
+from pathlib import Path
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -178,3 +180,66 @@ def get_operator_name(operator_id):
     ).fetchone()
     conn.close()
     return row[0] if row else None
+
+
+# ── write helpers (admin) ────────────────────────────────────────────────
+
+
+def ensure_maildir_structure(base_path):
+    """Create Maildir directory tree under base_path."""
+    for sub in (
+        "cur", "new", "tmp",
+        ".Sent/cur", ".Sent/new", ".Sent/tmp",
+        ".Trash/cur", ".Trash/new", ".Trash/tmp",
+        ".SentDuplicates/cur", ".SentDuplicates/new", ".SentDuplicates/tmp",
+    ):
+        (base_path / sub).mkdir(parents=True, exist_ok=True)
+    (base_path / "maildirfolder").write_text("")
+
+
+def create_mailbox_with_address(slug, name, address, maildir_parent):
+    """Create a mailbox + primary address in a single transaction.
+
+    Returns dict with mailbox id, slug, name, maildir_path or raises ValueError.
+    """
+    maildir_base = Path(maildir_parent)
+    maildir_path = maildir_base / slug
+    if not str(maildir_path).startswith(str(maildir_base)):
+        raise ValueError("mailbox path traversal denied")
+
+    if not re.match(r"^[a-z0-9_-]+$", slug):
+        raise ValueError("invalid slug")
+
+    conn = get_conn()
+    try:
+        dup_slug = conn.execute(
+            "SELECT id FROM mailboxes WHERE slug = ?", (slug,)
+        ).fetchone()
+        if dup_slug:
+            raise ValueError("mailbox slug already exists")
+
+        dup_addr = conn.execute(
+            "SELECT id FROM email_addresses WHERE address = ?", (address.lower(),)
+        ).fetchone()
+        if dup_addr:
+            raise ValueError("email address already exists")
+
+        ensure_maildir_structure(maildir_path)
+
+        conn.execute(
+            "INSERT INTO mailboxes (name, slug, maildir_path) VALUES (?, ?, ?)",
+            (name.strip(), slug, str(maildir_path)),
+        )
+        mb_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        conn.execute(
+            "INSERT INTO email_addresses (mailbox_id, address, is_primary, is_active) VALUES (?, ?, 1, 1)",
+            (mb_id, address.lower().strip()),
+        )
+        conn.commit()
+        return {"id": mb_id, "slug": slug, "name": name, "maildir_path": str(maildir_path)}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

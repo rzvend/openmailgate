@@ -1,10 +1,12 @@
 """Dashboard web routes — read-only HTML views."""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from api.auth import require_login
+from config import MAILDIR_BASE
 from database import (
+    create_mailbox_with_address,
     get_mailbox_addresses,
     get_mailbox_by_slug,
     get_mailbox_counts,
@@ -40,6 +42,46 @@ def dashboard(request: Request):
     return request.app.state.templates.TemplateResponse(
         request, "dashboard.html", {"mailboxes": result, "operators": ops}
     )
+
+
+@router.get("/dashboard/mailboxes/new")
+def new_mailbox_form(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "mailbox_new.html", {"error": None}
+    )
+
+
+@router.post("/dashboard/mailboxes/new")
+def create_mailbox(request: Request, slug: str = Form(""), name: str = Form(""),
+                   address: str = Form("")):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    error = None
+    slug = slug.strip().lower()
+    name = name.strip()
+    address = address.strip().lower()
+
+    if not slug or not name or not address:
+        error = "All fields are required."
+    elif "@" not in address:
+        error = "Invalid email address."
+
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "mailbox_new.html", {"error": error}
+        )
+
+    try:
+        mb = create_mailbox_with_address(slug, name, address, MAILDIR_BASE)
+    except ValueError as e:
+        return request.app.state.templates.TemplateResponse(
+            request, "mailbox_new.html", {"error": str(e)}
+        )
+
+    return RedirectResponse(url=f"/dashboard/mailboxes/{mb['slug']}", status_code=302)
 
 
 @router.get("/dashboard/mailboxes/{slug}")
