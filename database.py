@@ -101,7 +101,8 @@ def get_mailbox_addresses(mailbox_id):
     """Return email addresses for a mailbox (without password hash)."""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT id, mailbox_id, address, is_primary, is_active, created_at "
+        "SELECT id, mailbox_id, address, is_primary, is_active, created_at, "
+        "CASE WHEN imap_password_hash IS NOT NULL AND imap_password_hash != '' THEN 1 ELSE 0 END AS has_imap_password "
         "FROM email_addresses WHERE mailbox_id = ? ORDER BY id",
         (mailbox_id,),
     ).fetchall()
@@ -243,3 +244,28 @@ def create_mailbox_with_address(slug, name, address, maildir_parent):
         raise
     finally:
         conn.close()
+
+
+def get_email_address(address_id):
+    """Return address data (without hash) for display, or None."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT e.id, e.address, e.mailbox_id, e.is_primary, e.is_active, "
+        "m.slug AS mailbox_slug, m.name AS mailbox_name, "
+        "CASE WHEN e.imap_password_hash IS NOT NULL AND e.imap_password_hash != '' THEN 1 ELSE 0 END AS has_imap_password "
+        "FROM email_addresses e JOIN mailboxes m ON m.id = e.mailbox_id WHERE e.id = ?",
+        (address_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_email_address_imap_password_hash(address_id, password_hash):
+    """Set the IMAP password hash for an address."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE email_addresses SET imap_password_hash = ? WHERE id = ?",
+        (password_hash, address_id),
+    )
+    conn.commit()
+    conn.close()

@@ -3,10 +3,13 @@
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
+import subprocess
+
 from api.auth import require_login
 from config import MAILDIR_BASE
 from database import (
     create_mailbox_with_address,
+    get_email_address,
     get_mailbox_addresses,
     get_mailbox_by_slug,
     get_mailbox_counts,
@@ -19,6 +22,7 @@ from database import (
     get_operator_mailboxes,
     get_operator_name,
     get_operators,
+    update_email_address_imap_password_hash,
 )
 
 router = APIRouter(tags=["dashboard"])
@@ -133,3 +137,62 @@ def dashboard_operators(request: Request):
     return request.app.state.templates.TemplateResponse(
         request, "operators.html", {"operators": ops, "op_mailboxes": op_mailboxes}
     )
+
+
+# ── IMAP password ─────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/addresses/{address_id}/imap-password")
+def imap_password_form(request: Request, address_id: int):
+    _auth = require_login(request)
+    if _auth: return _auth
+    addr = get_email_address(address_id)
+    if not addr:
+        raise HTTPException(status_code=404, detail="address not found")
+    return request.app.state.templates.TemplateResponse(
+        request, "imap_password.html", {"addr": addr, "error": None}
+    )
+
+
+@router.post("/dashboard/addresses/{address_id}/imap-password")
+def imap_password_set(request: Request, address_id: int,
+                      password: str = Form(""), confirm: str = Form("")):
+    _auth = require_login(request)
+    if _auth: return _auth
+    addr = get_email_address(address_id)
+    if not addr:
+        raise HTTPException(status_code=404, detail="address not found")
+
+    error = None
+    if not password:
+        error = "Password cannot be empty."
+    elif len(password) < 8:
+        error = "Password must be at least 8 characters."
+    elif password != confirm:
+        error = "Passwords do not match."
+
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "imap_password.html", {"addr": addr, "error": error}
+        )
+
+    try:
+        result = subprocess.run(
+            ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+            input=f"{password}\n{password}",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        hashed = result.stdout.strip().split("\n")[-1]
+        if not hashed.startswith("{"):
+            raise ValueError("unexpected hash output")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="doveadm not available")
+    except Exception:
+        raise HTTPException(status_code=500, detail="failed to generate hash")
+
+    update_email_address_imap_password_hash(address_id, hashed)
+
+    slug = addr["mailbox_slug"]
+    return RedirectResponse(url=f"/dashboard/mailboxes/{slug}", status_code=302)

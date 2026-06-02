@@ -20,9 +20,30 @@
 {% if addresses %}
 <div class="card">
     <strong>Addresses:</strong>
-    {% for a in addresses %}
-        {{ a.address }}{% if a.is_primary %} (primary){% endif %}{% if not loop.last %}, {% endif %}
-    {% endfor %}
+    <table style="margin-top: 8px;">
+        <thead><tr><th>Address</th><th>Primary</th><th>Active</th><th>IMAP Password</th><th></th></tr></thead>
+        <tbody>
+        {% for a in addresses %}
+        <tr>
+            <td>{{ a.address }}</td>
+            <td>{{ "yes" if a.is_primary else "no" }}</td>
+            <td>{{ "yes" if a.is_active else "no" }}</td>
+            <td>
+                {% if a.has_imap_password %}
+                    <span class="badge badge-active">configured</span>
+                {% else %}
+                    <span class="badge badge-inactive">not configured</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="/dashboard/addresses/{{ a.id }}/imap-password">
+                    {% if a.has_imap_password %}Change{% else %}Set{% endif %}
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endif %}
 
