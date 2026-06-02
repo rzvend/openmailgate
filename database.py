@@ -166,3 +166,15 @@ def get_operator_mailboxes(operator_id):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_operator_name(operator_id):
+    """Return username for an operator id, or None."""
+    if operator_id is None:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT username FROM operators WHERE id = ?", (operator_id,)
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="card">
+    <strong>{{ mailboxes|length }}</strong> mailboxes ·
+    <strong>{{ operators|length }}</strong> operators
+</div>
+
+<h2>Mailboxes</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Slug</th>
+            <th>Active</th>
+            <th>Total</th>
+            <th>In</th>
+            <th>Out</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for mb in mailboxes %}
+        <tr>
+            <td>{{ mb.name }}</td>
+            <td>{{ mb.slug }}</td>
+            <td>
+                {% if mb.is_active %}
+                    <span class="badge badge-active">active</span>
+                {% else %}
+                    <span class="badge badge-inactive">inactive</span>
+                {% endif %}
+            </td>
+            <td>{{ mb.total_messages }}</td>
+            <td>{{ mb.inbound_count }}</td>
+            <td>{{ mb.outbound_count }}</td>
+            <td><a href="/dashboard/mailboxes/{{ mb.slug }}">open</a></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

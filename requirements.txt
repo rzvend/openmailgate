@@ -4,3 +4,4 @@ aiosmtpd
 pytest
 fastapi
 uvicorn
+aiofiles

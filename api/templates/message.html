@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ msg.subject or '(no subject)' }} — Message{% endblock %}
+{% block content %}
+<h1>{{ msg.subject or '(no subject)' }}</h1>
+
+<div class="card">
+    <strong>ID:</strong> {{ msg.id }} &nbsp;
+    <strong>Direction:</strong>
+    {% if msg.direction == 'inbound' %}
+        <span class="badge badge-inbound">inbound</span>
+    {% else %}
+        <span class="badge badge-outbound">outbound</span>
+    {% endif %}
+    &nbsp;
+    <strong>Status:</strong> {{ msg.status }}
+    {% if msg.internal_status %}
+        <span class="badge badge-target"># {{ msg.internal_status }}</span>
+    {% endif %}
+</div>
+
+<div class="card">
+    <strong>From:</strong> {{ msg.sender or '?' }}<br>
+    <strong>To:</strong> {{ msg.recipient or '?' }}<br>
+    <strong>Assigned to:</strong> {{ assigned_name or '—' }}<br>
+    <strong>Message-ID:</strong> <code>{{ msg.message_id or '?' }}</code><br>
+    <strong>Thread-ID:</strong> <code>{{ msg.thread_id or '?' }}</code><br>
+    <strong>Processed:</strong> {{ msg.processed_at or '?' }}<br>
+    {% if msg.sent_at %}<strong>Sent:</strong> {{ msg.sent_at }}<br>{% endif %}
+    <strong>Maildir:</strong> <code>{{ msg.local_maildir_path or '?' }}</code>
+</div>
+
+{% if msg.delivery_status or msg.diagnostic_code %}
+<div class="card">
+    <strong>Delivery:</strong><br>
+    Status: {{ msg.delivery_status or '?' }}<br>
+    Action: {{ msg.delivery_action or '?' }}<br>
+    Diagnostic: {{ msg.diagnostic_code or '?' }}<br>
+    Bounced at: {{ msg.bounced_at or '?' }}
+</div>
+{% endif %}
+
+<div class="section">
+<h2>Mailboxes</h2>
+{% if mailboxes %}
+<table>
+    <thead><tr><th>Slug</th><th>Name</th><th>Role</th><th>Maildir</th></tr></thead>
+    <tbody>
+    {% for mb in mailboxes %}
+        <tr>
+            <td><a href="/dashboard/mailboxes/{{ mb.slug }}">{{ mb.slug }}</a></td>
+            <td>{{ mb.name }}</td>
+            <td><span class="badge badge-{{ mb.role }}">{{ mb.role }}</span></td>
+            <td class="muted"><code>{{ mb.maildir_path }}</code></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">No mailbox associations.</p>
+{% endif %}
+</div>
+
+<div class="section">
+<h2>Events</h2>
+{% if events %}
+<table>
+    <thead><tr><th>Type</th><th>Time</th><th>Source</th><th>Action</th><th>Code</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+        <tr>
+            <td>{{ e.event_type }}</td>
+            <td>{{ e.event_time }}</td>
+            <td>{{ e.source or '' }}</td>
+            <td>{{ e.action or '' }}</td>
+            <td>{{ e.status_code or '' }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">No events recorded.</p>
+{% endif %}
+</div>
+
+<div class="section">
+<h2>Notes</h2>
+{% if notes %}
+<table>
+    <thead><tr><th>Time</th><th>Content</th></tr></thead>
+    <tbody>
+    {% for n in notes %}
+        <tr>
+            <td>{{ n.event_time }}</td>
+            <td>{{ n.metadata_json or '(empty)' }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">No notes recorded.</p>
+{% endif %}
+</div>
+{% endblock %}

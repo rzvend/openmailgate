@@ -1,0 +1,75 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #f5f5f5;
+    color: #333;
+}
+nav {
+    background: #2c3e50;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+    border-radius: 6px;
+}
+nav a {
+    color: #ecf0f1;
+    text-decoration: none;
+    margin-right: 20px;
+    font-weight: 500;
+}
+nav a:hover { text-decoration: underline; }
+h1 { color: #2c3e50; font-size: 24px; }
+h2 { color: #34495e; font-size: 18px; margin-top: 24px; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+th { background: #f0f0f0; font-weight: 600; }
+tr:hover { background: #fafafa; }
+.card {
+    background: #fff;
+    padding: 16px 20px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    margin-bottom: 16px;
+}
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.badge-inbound { background: #d4edda; color: #155724; }
+.badge-outbound { background: #d1ecf1; color: #0c5460; }
+.badge-active { background: #d4edda; color: #155724; }
+.badge-inactive { background: #f8d7da; color: #721c24; }
+.badge-target { background: #d4edda; color: #155724; }
+.badge-master_copy { background: #fff3cd; color: #856404; }
+.badge-fallback { background: #e2e3e5; color: #383d41; }
+.badge-processed { background: #d4edda; color: #155724; }
+.badge-accepted { background: #d1ecf1; color: #0c5460; }
+.badge-failed, .badge-bounced { background: #f8d7da; color: #721c24; }
+.pagination { margin-top: 16px; }
+.pagination a {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #2c3e50;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+.section { margin-top: 20px; }
+.muted { color: #888; }
+.empty { color: #888; font-style: italic; }

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Operators — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Operators</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Active</th>
+            <th>Mailboxes</th>
+            <th>Created</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for op in operators %}
+        <tr>
+            <td>{{ op.username }}</td>
+            <td>
+                {% if op.is_active %}
+                    <span class="badge badge-active">active</span>
+                {% else %}
+                    <span class="badge badge-inactive">inactive</span>
+                {% endif %}
+            </td>
+            <td>{{ op.mailbox_count }}</td>
+            <td class="muted">{{ op.created_at }}</td>
+            <td><a href="/dashboard/mailboxes/master">mailboxes</a></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% for op in operators %}
+<div class="section">
+    <h2>{{ op.username }}</h2>
+    {% if op_mailboxes[op.id] %}
+    <table>
+        <thead><tr><th>Mailbox</th><th>Role</th></tr></thead>
+        <tbody>
+        {% for mb in op_mailboxes[op.id] %}
+            <tr>
+                <td><a href="/dashboard/mailboxes/{{ mb.slug }}">{{ mb.name }}</a></td>
+                <td>{{ mb.role }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No mailbox grants.</p>
+    {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

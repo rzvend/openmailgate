@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ mailbox.name }} — Mailbox{% endblock %}
+{% block content %}
+<h1>{{ mailbox.name }}</h1>
+
+<div class="card">
+    <strong>Slug:</strong> {{ mailbox.slug }} &nbsp;
+    {% if mailbox.is_active %}
+        <span class="badge badge-active">active</span>
+    {% else %}
+        <span class="badge badge-inactive">inactive</span>
+    {% endif %}
+    &nbsp;
+    <strong>Total:</strong> {{ mailbox.total_messages }}
+    (in: {{ mailbox.inbound_count }}, out: {{ mailbox.outbound_count }})
+    <br>
+    <strong>Maildir:</strong> <code>{{ mailbox.maildir_path }}</code>
+</div>
+
+{% if addresses %}
+<div class="card">
+    <strong>Addresses:</strong>
+    {% for a in addresses %}
+        {{ a.address }}{% if a.is_primary %} (primary){% endif %}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+<h2>Messages</h2>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Dir</th>
+            <th>Subject</th>
+            <th>From / To</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>Date</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for m in messages %}
+        <tr>
+            <td>{{ m.id }}</td>
+            <td>
+                {% if m.direction == 'inbound' %}
+                    <span class="badge badge-inbound">in</span>
+                {% else %}
+                    <span class="badge badge-outbound">out</span>
+                {% endif %}
+            </td>
+            <td>{{ m.subject or '(no subject)' }}</td>
+            <td>
+                {% if m.direction == 'inbound' %}{{ m.sender or '?' }}{% else %}{{ m.recipient or '?' }}{% endif %}
+            </td>
+            <td>
+                {% if m.status == 'processed' or m.status == 'accepted_by_ses' %}
+                    <span class="badge badge-processed">{{ m.status }}</span>
+                {% elif m.status == 'bounced' or m.status == 'failed' %}
+                    <span class="badge badge-bounced">{{ m.status }}</span>
+                {% else %}
+                    {{ m.status }}
+                {% endif %}
+            </td>
+            <td>
+                {% if m.role %}
+                    <span class="badge badge-{{ m.role }}">{{ m.role }}</span>
+                {% endif %}
+            </td>
+            <td class="muted">{{ m.processed_at or m.sent_at or '' }}</td>
+            <td><a href="/dashboard/messages/{{ m.id }}">view</a></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {% if offset > 0 %}
+        <a href="?limit={{ limit }}&offset={{ [offset - limit, 0]|max }}{% if direction %}&direction={{ direction }}{% endif %}">&#8592; Previous</a>
+    {% endif %}
+    {% if messages|length == limit %}
+        <a href="?limit={{ limit }}&offset={{ offset + limit }}{% if direction %}&direction={{ direction }}{% endif %}">Next &#8594;</a>
+    {% endif %}
+</div>
+
+<p class="muted">Showing {{ messages|length }} of {{ mailbox.total_messages }} messages</p>
+{% endblock %}
