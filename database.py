@@ -93,3 +93,76 @@ def get_message_notes(message_id):
         e for e in get_message_events(message_id)
         if e.get("event_type") == "note"
     ]
+
+
+def get_mailbox_addresses(mailbox_id):
+    """Return email addresses for a mailbox (without password hash)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, mailbox_id, address, is_primary, is_active, created_at "
+        "FROM email_addresses WHERE mailbox_id = ? ORDER BY id",
+        (mailbox_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_mailbox_counts(mailbox_id):
+    """Return (total, inbound, outbound) counts for a mailbox."""
+    conn = get_conn()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM message_mailboxes WHERE mailbox_id = ?", (mailbox_id,)
+    ).fetchone()[0]
+    inbound = conn.execute(
+        "SELECT COUNT(*) FROM message_mailboxes mm "
+        "JOIN messages msg ON msg.id = mm.message_id "
+        "WHERE mm.mailbox_id = ? AND msg.direction = 'inbound'",
+        (mailbox_id,),
+    ).fetchone()[0]
+    outbound = conn.execute(
+        "SELECT COUNT(*) FROM message_mailboxes mm "
+        "JOIN messages msg ON msg.id = mm.message_id "
+        "WHERE mm.mailbox_id = ? AND msg.direction = 'outbound'",
+        (mailbox_id,),
+    ).fetchone()[0]
+    conn.close()
+    return total, inbound, outbound
+
+
+def get_operators():
+    """Return all operators (without password_hash)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT o.id, o.username, o.is_active, o.created_at, "
+        "(SELECT COUNT(*) FROM operator_mailboxes WHERE operator_id = o.id) AS mailbox_count "
+        "FROM operators o ORDER BY o.id"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_operator_by_username(username):
+    """Return a single operator dict (without password_hash) or None."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT o.id, o.username, o.is_active, o.created_at, "
+        "(SELECT COUNT(*) FROM operator_mailboxes WHERE operator_id = o.id) AS mailbox_count "
+        "FROM operators o WHERE o.username = ?",
+        (username,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_operator_mailboxes(operator_id):
+    """Return mailbox grants for an operator."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT m.id AS mailbox_id, m.slug, m.name, om.role "
+        "FROM operator_mailboxes om "
+        "JOIN mailboxes m ON m.id = om.mailbox_id "
+        "WHERE om.operator_id = ? ORDER BY m.slug",
+        (operator_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

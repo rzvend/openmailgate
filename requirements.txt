@@ -2,3 +2,5 @@ boto3
 python-dotenv
 aiosmtpd
 pytest
+fastapi
+uvicorn
