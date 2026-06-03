@@ -61,6 +61,15 @@ echo "[4/4] Running migrations..."
 docker compose run --rm api python3 worker/migrate.py
 echo "      Migrations applied"
 
+echo "[5/5] Bootstrapping initial admin operator..."
+if docker compose run --rm api python3 scripts/bootstrap_admin.py; then
+    echo ""
+    echo "      IMPORTANT: Save the admin password shown above."
+    echo "      It will not be displayed again."
+else
+    echo "      Bootstrap skipped or failed. You may need to create an operator manually."
+fi
+
 echo ""
 echo "=== Ready ==="
 echo ""

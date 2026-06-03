@@ -22,11 +22,23 @@ cp .env.example .env
 # Start
 docker compose build
 docker compose run --rm api python3 worker/migrate.py
+docker compose run --rm api python3 scripts/bootstrap_admin.py
 docker compose up -d
 docker compose ps
 ```
 
-Open `http://localhost:8000/dashboard` and log in with the operator created during setup.
+Open `http://localhost:8000/dashboard` and log in with the **admin** credentials shown by the bootstrap step above.
+
+## Initial Admin Bootstrap
+
+On a fresh installation, `scripts/bootstrap_admin.py` creates an initial `admin` operator with a random password. The password is printed once in the terminal — save it immediately and change it from the dashboard.
+
+The script is idempotent: if any active operator already exists, it does nothing.
+
+```bash
+# Manual re-run (Docker):
+docker compose run --rm api python3 scripts/bootstrap_admin.py
+```
 
 ## Setup Workflow
 
