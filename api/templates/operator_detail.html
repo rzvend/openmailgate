@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ op.username }} — Operator{% endblock %}
+{% block content %}
+<h1>{{ op.username }}</h1>
+
+<div class="card">
+    <strong>Status:</strong>
+    {% if op.is_active %}
+        <span class="badge badge-active">active</span>
+        <form method="post" action="/dashboard/operators/{{ op.username }}/disable" style="display: inline; margin-left: 8px;">
+            <button type="submit" style="background: #e74c3c; color: #fff; border: none; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Disable</button>
+        </form>
+    {% else %}
+        <span class="badge badge-inactive">inactive</span>
+        <form method="post" action="/dashboard/operators/{{ op.username }}/enable" style="display: inline; margin-left: 8px;">
+            <button type="submit" style="background: #27ae60; color: #fff; border: none; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Enable</button>
+        </form>
+    {% endif %}
+    <br>
+    <strong>Created:</strong> {{ op.created_at }}
+</div>
+
+<div class="section">
+<h2>Change Password</h2>
+<form method="post" action="/dashboard/operators/{{ op.username }}/password" style="margin-bottom: 12px;">
+    <input type="password" name="password" placeholder="New password" required minlength="8" style="padding: 6px; width: 200px;">
+    <input type="password" name="confirm" placeholder="Confirm" required minlength="8" style="padding: 6px; width: 200px; margin-left: 6px;">
+    <button type="submit" style="padding: 6px 14px; background: #2c3e50; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Change</button>
+</form>
+</div>
+
+<div class="section">
+<h2>Mailbox Permissions</h2>
+{% if op.mailboxes %}
+<table>
+    <thead><tr><th>Mailbox</th><th>Role</th><th></th></tr></thead>
+    <tbody>
+    {% for mb in op.mailboxes %}
+    <tr>
+        <td><a href="/dashboard/mailboxes/{{ mb.slug }}">{{ mb.name }}</a></td>
+        <td>{{ mb.role }}</td>
+        <td>
+            <form method="post" action="/dashboard/operators/{{ op.username }}/revoke" style="display: inline;">
+                <input type="hidden" name="mailbox_id" value="{{ mb.mailbox_id }}">
+                <button type="submit" style="background: none; border: none; color: #e74c3c; cursor: pointer; text-decoration: underline;">Revoke</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty">No mailbox permissions.</p>
+{% endif %}
+
+<h3>Grant Access</h3>
+<form method="post" action="/dashboard/operators/{{ op.username }}/grant" style="margin-bottom: 8px;">
+    <select name="mailbox_id" required style="padding: 6px;">
+        <option value="">Select mailbox...</option>
+        {% for mb in mailboxes %}
+        <option value="{{ mb.id }}">{{ mb.name }} ({{ mb.slug }})</option>
+        {% endfor %}
+    </select>
+    <select name="role" style="padding: 6px; margin-left: 6px;">
+        <option value="viewer">viewer</option>
+        <option value="admin">admin</option>
+    </select>
+    <button type="submit" style="padding: 6px 14px; background: #27ae60; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-left: 6px;">Grant</button>
+</form>
+</div>
+
+{% if error %}<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>{% endif %}
+
+<div style="margin-top: 16px;">
+    <a href="/dashboard/operators">← Back to operators</a>
+</div>
+{% endblock %}
