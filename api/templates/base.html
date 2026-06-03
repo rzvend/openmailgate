@@ -8,17 +8,19 @@
 </head>
 <body>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/dashboard/mailboxes/master">Master</a>
-        <a href="/dashboard/mailboxes/wizard">Create mailbox</a>
-        <a href="/dashboard/mailboxes/new">+ New (advanced)</a>
-        <a href="/dashboard/operators">Operators</a>
-        <a href="/dashboard/imap-sync">IMAP Sync</a>
-        <a href="/dashboard/catch-all">Catch-all</a>
-        <a href="/dashboard/archive">Archive</a>
-        <a href="/dashboard/status">Status</a>
-        <a href="/docs">API Docs</a>
-        <span style="float: right; color: #ecf0f1;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px;">
+            <a href="/dashboard">Dashboard</a>
+            <a href="/dashboard/mailboxes/master">Master</a>
+            <a href="/dashboard/mailboxes/wizard">Create mailbox</a>
+            <a href="/dashboard/mailboxes/new">+ New (advanced)</a>
+            <a href="/dashboard/operators">Operators</a>
+            <a href="/dashboard/imap-sync">IMAP Sync</a>
+            <a href="/dashboard/catch-all">Catch-all</a>
+            <a href="/dashboard/archive">Archive</a>
+            <a href="/dashboard/status">Status</a>
+            <a href="/docs">API Docs</a>
+        </div>
+        <div style="flex-shrink: 0; color: #ecf0f1;">
             {% if request.session.get("username") %}
                 {{ request.session["username"] }}
                 <form method="post" action="/auth/logout" style="display: inline;">
@@ -27,7 +29,7 @@
             {% else %}
                 <a href="/auth/login" style="color: #ecf0f1;">Login</a>
             {% endif %}
-        </span>
+        </div>
     </nav>
     <main>
         {% block content %}{% endblock %}

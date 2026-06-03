@@ -11,11 +11,15 @@ nav {
     padding: 12px 20px;
     margin-bottom: 24px;
     border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
 }
 nav a {
     color: #ecf0f1;
     text-decoration: none;
-    margin-right: 20px;
     font-weight: 500;
 }
 nav a:hover { text-decoration: underline; }
