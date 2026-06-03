@@ -743,6 +743,39 @@ def setup_iac_plan(request: Request):
         _release_iac_lock(lock)
 
 
+@router.post("/dashboard/setup/iac/apply")
+def setup_iac_apply(
+    request: Request,
+    confirmation: str = Form(""),
+):
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
+    plan_file = f"{state_dir}/last.tfplan"
+    expected = "I understand this will create/update cloud resources"
+
+    if confirmation.strip() != expected:
+        return _render_iac(request, tool, workdir, output=None,
+                           error="Confirmation phrase did not match. Apply was not executed.")
+
+    if not _os.path.exists(plan_file):
+        return _render_iac(request, tool, workdir, output=None,
+                           error="No plan file found. Run plan before apply.")
+
+    lock = _acquire_iac_lock()
+    if not lock:
+        return _render_iac(request, tool, workdir, output=None,
+                           error="Another IAC job is already running.")
+    try:
+        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        code, output = _run_iac_command(tool, ["apply", plan_file], workdir, env)
+        return _render_iac(request, tool, workdir, output=output, error=None)
+    finally:
+        _release_iac_lock(lock)
+
+
 def _render_iac(request, tool, workdir, output, error):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")

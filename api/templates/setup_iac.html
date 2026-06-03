@@ -33,13 +33,29 @@
 </div>
 {% endif %}
 
+<h2 style="margin-top: 24px;">Apply</h2>
+<div class="card" style="background: #f8d7da; border: 1px solid #e74c3c;">
+    <p><strong>WARNING: apply will create or update real cloud resources.</strong></p>
+    <p>This automation is alpha. Review the plan before applying.</p>
+    <p>Plan file: <code>{{ state_dir }}/last.tfplan</code></p>
+    <p>Type the confirmation phrase to enable apply:</p>
+    <p style="font-weight: bold; background: #fff; padding: 8px; border-radius: 4px;">I understand this will create/update cloud resources</p>
+    <form method="post" action="/dashboard/setup/iac/apply">
+        <input type="text" name="confirmation" placeholder="Paste the confirmation phrase here" required
+               style="padding: 8px; width: 100%; max-width: 550px; margin-bottom: 8px;">
+        <br>
+        <button type="submit" style="padding: 8px 20px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Run apply</button>
+    </form>
+</div>
+
 <h2 style="margin-top: 24px;">Manual Mode</h2>
 <div class="card">
     <p>Run these commands outside the dashboard:</p>
     <pre style="background: #f9f9f9; padding: 12px; border-radius: 4px;">cd {{ workdir }}
 {{ tool }} init
-{{ tool }} plan -out={{ state_dir }}/last.tfplan</pre>
-    <p class="muted">Apply must be run manually and is not available from the dashboard yet.</p>
+{{ tool }} plan -out={{ state_dir }}/last.tfplan
+{{ tool }} apply {{ state_dir }}/last.tfplan</pre>
+    <p class="muted">Apply can also be run manually after reviewing the plan.</p>
 </div>
 
 <div style="margin-top: 16px;">

@@ -526,6 +526,46 @@ def test_setup_iac_shows_manual_mode():
     assert "plan" in r.text.lower()
 
 
+# ── setup IAC apply tests ──────────────────────────────────────────────
+
+
+def test_iac_apply_requires_login():
+    client.post("/auth/logout")
+    r = client.post("/dashboard/setup/iac/apply",
+                    data={"confirmation": "test"}, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_iac_apply_rejects_wrong_confirmation():
+    _login()
+    r = client.post("/dashboard/setup/iac/apply",
+                    data={"confirmation": "wrong phrase"}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "did not match" in r.text or "not executed" in r.text.lower()
+
+
+def test_iac_apply_exact_confirmation_required():
+    _login()
+    r = client.post("/dashboard/setup/iac/apply",
+                    data={"confirmation": "i understand this will create/update cloud resources"},
+                    # lowercase — should fail
+                    follow_redirects=False)
+    assert "did not match" in r.text.lower() or "not executed" in r.text.lower()
+
+
+def test_iac_apply_page_shows_warning():
+    _login()
+    r = client.get("/dashboard/setup/iac")
+    assert "will create or update real cloud resources" in r.text.lower()
+    assert "alpha" in r.text.lower()
+
+
+def test_iac_apply_page_shows_manual_apply():
+    _login()
+    r = client.get("/dashboard/setup/iac")
+    assert "apply" in r.text.lower()
+
+
 
 # ── archive mailbox tests ──────────────────────────────────────────────
 
