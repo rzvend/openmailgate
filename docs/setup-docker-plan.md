@@ -331,7 +331,7 @@ After the first-run flow finishes:
 
 ## Next Phase: G.1
 
-G.1 will use this document to create:
+G.1 creates the base Docker Compose setup.
 
 - `docker-compose.yml` with services: API, SQS worker, SMTP sender, Dovecot, Postfix
 - `.env.example` file based on the variable map above
