@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Catch-all — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Catch-all Mailbox</h1>
+
+<div class="card">
+    <p>Catch-all receives messages sent to addresses that are not explicitly configured in any mailbox.</p>
+    <p>Existing active addresses always take priority over catch-all. Inactive addresses and inactive mailboxes are ignored.</p>
+</div>
+
+{% if current %}
+<div class="card" style="background: #d4edda;">
+    <strong>Current catch-all:</strong> {{ current.name }} ({{ current.slug }})
+    <form method="post" action="/dashboard/catch-all/clear" style="display: inline; margin-left: 12px;">
+        <button type="submit" style="background: #e74c3c; color: #fff; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer;">Remove catch-all</button>
+    </form>
+</div>
+{% else %}
+<div class="card" style="background: #fff3cd;">
+    <p><strong>No catch-all configured.</strong> Unknown recipients will use the default fallback (master).</p>
+</div>
+{% endif %}
+
+<h2>Set Catch-all</h2>
+<form method="post" action="/dashboard/catch-all">
+    <select name="mailbox_id" required style="padding: 6px; width: 300px;">
+        <option value="">Select active mailbox...</option>
+        {% for mb in mailboxes %}
+        {% if mb.is_active %}
+        <option value="{{ mb.id }}">{{ mb.name }} ({{ mb.slug }})</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+    <button type="submit" style="padding: 6px 16px; background: #2c3e50; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-left: 8px;">Set catch-all</button>
+</form>
+
+{% if error %}<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px; margin-top: 12px;">{{ error }}</p>{% endif %}
+{% endblock %}

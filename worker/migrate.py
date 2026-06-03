@@ -280,6 +280,19 @@ def main():
     conn.close()
     print("Multi-mailbox migration complete.")
 
+    # ── settings table ────────────────────────────────────────────────
+    conn = sqlite3.connect(str(db))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    print("Ensured settings table exists.")
+    conn.close()
+
 
 if __name__ == "__main__":
     main()

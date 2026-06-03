@@ -15,9 +15,11 @@ import worker.dovecot_users as du
 from api.auth import require_login
 from config import DB_PATH, MAILDIR_BASE
 from database import (
+    clear_catch_all_mailbox,
     count_active_operators,
     create_mailbox_with_address,
     create_operator,
+    get_catch_all_mailbox,
     get_email_address,
     get_mailbox_addresses,
     get_mailbox_by_slug,
@@ -34,6 +36,7 @@ from database import (
     get_operators,
     grant_operator_mailbox,
     revoke_operator_mailbox,
+    set_catch_all_mailbox,
     set_email_address_active,
     set_mailbox_active,
     set_operator_active,
@@ -502,6 +505,44 @@ def enable_address(request: Request, address_id: int):
     if not addr:
         raise HTTPException(status_code=404, detail="address not found")
     return RedirectResponse(url=f"/dashboard/mailboxes/{addr['mailbox_slug']}", status_code=302)
+
+
+# ── catch-all ──────────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/catch-all")
+def catch_all_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    current = get_catch_all_mailbox()
+    boxes = get_mailboxes()
+    return request.app.state.templates.TemplateResponse(
+        request, "catch_all.html",
+        {"current": current, "mailboxes": boxes, "error": None}
+    )
+
+
+@router.post("/dashboard/catch-all")
+def catch_all_set(request: Request, mailbox_id: int = Form(...)):
+    _auth = require_login(request)
+    if _auth: return _auth
+    mb = set_catch_all_mailbox(mailbox_id)
+    if not mb:
+        boxes = get_mailboxes()
+        return request.app.state.templates.TemplateResponse(
+            request, "catch_all.html",
+            {"current": get_catch_all_mailbox(), "mailboxes": boxes,
+             "error": "Invalid or inactive mailbox."}
+        )
+    return RedirectResponse(url="/dashboard/catch-all", status_code=302)
+
+
+@router.post("/dashboard/catch-all/clear")
+def catch_all_clear(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    clear_catch_all_mailbox()
+    return RedirectResponse(url="/dashboard/catch-all", status_code=302)
 
 
 # ── IMAP sync ──────────────────────────────────────────────────────────

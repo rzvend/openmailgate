@@ -275,6 +275,60 @@ def test_operator_templates_no_password_hash():
     assert "{SHA512-CRYPT}" not in r.text
 
 
+# ── catch-all tests ───────────────────────────────────────────────────
+
+
+def test_catch_all_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/catch-all", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_catch_all_page_loads():
+    _login()
+    r = client.get("/dashboard/catch-all")
+    assert r.status_code == 200
+    assert "Catch-all" in r.text
+
+
+def test_set_catch_all_success():
+    _login()
+    r = client.post("/dashboard/catch-all", data={"mailbox_id": "1"}, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_set_catch_all_rejects_invalid_mailbox():
+    _login()
+    r = client.post("/dashboard/catch-all", data={"mailbox_id": "99999"}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "Invalid" in r.text
+
+
+def test_clear_catch_all_success():
+    _login()
+    client.post("/dashboard/catch-all", data={"mailbox_id": "1"})
+    r = client.post("/dashboard/catch-all/clear", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_get_catch_all_returns_none_when_not_configured():
+    from database import clear_catch_all_mailbox, get_catch_all_mailbox
+    clear_catch_all_mailbox()
+    assert get_catch_all_mailbox() is None
+
+
+def test_resolver_uses_catch_all():
+    from database import get_catch_all_mailbox, set_catch_all_mailbox
+    # Set catch-all to master (id=1)
+    set_catch_all_mailbox(1)
+    mb = get_catch_all_mailbox()
+    assert mb is not None
+    assert mb["slug"] == "master"
+    # Clean up
+    from database import clear_catch_all_mailbox
+    clear_catch_all_mailbox()
+
+
 # ── mailbox wizard tests ──────────────────────────────────────────────
 
 

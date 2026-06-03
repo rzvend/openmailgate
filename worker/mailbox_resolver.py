@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import DB_PATH  # noqa: E402
+from database import get_catch_all_mailbox  # noqa: E402
 
 
 def _connect():
@@ -66,6 +67,11 @@ def resolve_mailbox_for_inbound(conn, headers):
             match = get_mailbox_by_address(conn, addr)
             if match:
                 return match
+
+    # ── try catch-all ────────────────────────────────────────────────
+    catch_all = get_catch_all_mailbox()
+    if catch_all:
+        return catch_all["id"], catch_all["slug"]
 
     return None, None
 

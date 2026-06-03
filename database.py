@@ -386,3 +386,65 @@ def revoke_operator_mailbox(username, mailbox_id):
                  (op[0], mailbox_id))
     conn.commit()
     conn.close()
+
+
+# ── settings / catch-all ───────────────────────────────────────────────
+
+
+def get_setting(key):
+    conn = get_conn()
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def set_setting(key, value):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+        (key, str(value)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_setting(key):
+    conn = get_conn()
+    conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    conn.commit()
+    conn.close()
+
+
+def get_catch_all_mailbox():
+    mb_id = get_setting("catch_all_mailbox_id")
+    if not mb_id:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, slug, name, maildir_path, is_active FROM mailboxes WHERE id = ? AND is_active = 1",
+        (int(mb_id),),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_catch_all_mailbox(mailbox_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, slug, name, is_active FROM mailboxes WHERE id = ?", (mailbox_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    mb = dict(row)
+    if not mb["is_active"]:
+        conn.close()
+        return None
+    set_setting("catch_all_mailbox_id", mailbox_id)
+    conn.close()
+    return mb
+
+
+def clear_catch_all_mailbox():
+    delete_setting("catch_all_mailbox_id")
