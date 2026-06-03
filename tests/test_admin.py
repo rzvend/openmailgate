@@ -410,6 +410,40 @@ def test_s3_cleanup_dry_run_shows_warning_for_incoming():
     assert "unprocessed" in r.text.lower() or "WARNING" in r.text
 
 
+# ── setup page tests ───────────────────────────────────────────────────
+
+
+def test_setup_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/setup", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_setup_page_loads():
+    _login()
+    r = client.get("/dashboard/setup")
+    assert r.status_code == 200
+    assert "Setup" in r.text
+
+
+def test_setup_page_shows_vars():
+    _login()
+    r = client.get("/dashboard/setup")
+    assert "SESSION_SECRET" in r.text
+    assert "AWS_REGION" in r.text
+    assert "S3_BUCKET" in r.text
+    assert "configured" in r.text or "missing" in r.text
+
+
+def test_setup_page_no_secrets():
+    _login()
+    r = client.get("/dashboard/setup")
+    for secret in ("AWS_SECRET_ACCESS_KEY", "CLOUDFLARE_API_TOKEN", "AWS_ACCESS_KEY_ID"):
+        assert secret not in r.text
+    # The word "SECRET" may appear as a variable name, that's OK — just not a value
+
+
+
 # ── archive mailbox tests ──────────────────────────────────────────────
 
 

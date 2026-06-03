@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Setup — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Setup</h1>
+
+<p class="muted">Version {{ version }}</p>
+
+<div class="card">
+    <p>This page shows the status of environment variables needed for the application.</p>
+    <p><strong>No secret values are displayed.</strong> Sensitive variables show only <em>configured</em> or <em>missing</em>.</p>
+    <p class="muted">Terraform/OpenTofu automation is alpha. No cloud resources are created from this page.</p>
+</div>
+
+<table>
+    <thead><tr><th>Group</th><th>Variable</th><th>Required</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td>{{ r.group }}</td>
+        <td><code>{{ r.var }}</code></td>
+        <td>{{ "required" if r.required else "optional" }}</td>
+        <td>
+            {% if r.configured %}
+                <span class="badge badge-active">configured</span>
+            {% else %}
+                <span class="badge badge-inactive">missing</span>
+                {% if r.required %}<span style="color: #e74c3c;"> *</span>{% endif %}
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Next Steps</h2>
+<div class="card">
+    <ol>
+        <li>Complete missing required variables in <code>.env</code> or <code>docker-compose</code> environment.</li>
+        <li>Restart containers after editing <code>.env</code>.</li>
+        <li>AWS/Cloudflare setup wizard will be available in a future step.</li>
+        <li>Terraform/OpenTofu automation will be implemented in a later phase.</li>
+    </ol>
+</div>
+{% endblock %}

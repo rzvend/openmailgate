@@ -551,6 +551,71 @@ def catch_all_clear(request: Request):
     return RedirectResponse(url="/dashboard/catch-all", status_code=302)
 
 
+# ── setup / first-run ──────────────────────────────────────────────────
+
+SETUP_CHECK_VARS = [
+    ("App", "APP_VERSION", False),
+    ("App", "SESSION_SECRET", True),
+    ("App", "DEFAULT_FROM_DOMAIN", False),
+    ("AWS", "AWS_REGION", True),
+    ("AWS", "S3_BUCKET", True),
+    ("AWS", "SQS_QUEUE_URL", True),
+    ("AWS", "S3_INCOMING_PREFIX", False),
+    ("AWS", "S3_PROCESSED_PREFIX", False),
+    ("AWS", "S3_FAILED_PREFIX", False),
+    ("AWS", "SES_SMTP_HOST", False),
+    ("AWS", "SES_SMTP_PORT", False),
+    ("AWS", "SES_SMTP_USERNAME", True),
+    ("Cloudflare", "CLOUDFLARE_ZONE_ID", True),
+    ("Mail", "MASTER_MAILDIR", True),
+    ("Mail", "DB_PATH", True),
+    ("Mail", "LOCAL_SMTP_PORT", False),
+    ("Mail", "SQS_WAIT_TIME", False),
+    ("Mail", "SQS_MAX_MESSAGES", False),
+]
+
+SENSITIVE_VARS = {
+    "SESSION_SECRET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_API_TOKEN", "SES_SMTP_PASSWORD", "SES_SMTP_USERNAME",
+}
+
+SETUP_UNDERLYING_NAMES = {
+    "S3_BUCKET": "S3_BUCKET", "SQS_QUEUE_URL": "SQS_QUEUE_URL",
+    "AWS_REGION": "AWS_REGION", "CLOUDFLARE_ZONE_ID": "CLOUDFLARE_ZONE_ID",
+    "SES_SMTP_HOST": "SES_SMTP_HOST", "SES_SMTP_USERNAME": "SES_SMTP_USERNAME",
+    "SES_SMTP_PASSWORD": "SES_SMTP_PASSWORD",
+    "MASTER_MAILDIR": "MASTER_MAILDIR", "DB_PATH": "DB_PATH",
+    "DEFAULT_FROM_DOMAIN": "DEFAULT_FROM_DOMAIN",
+}
+
+
+def _get_setup_status():
+    import os
+    rows = []
+    for group, var_name, required in SETUP_CHECK_VARS:
+        env_name = SETUP_UNDERLYING_NAMES.get(var_name, var_name)
+        value = os.getenv(env_name, "")
+        configured = bool(value and value not in ("", "CHANGE_ME"))
+        sensitive = var_name in SENSITIVE_VARS
+        rows.append({
+            "group": group, "var": var_name, "required": required,
+            "configured": configured, "sensitive": sensitive,
+        })
+    return rows
+
+
+@router.get("/dashboard/setup")
+def setup_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    from config import APP_VERSION
+    rows = _get_setup_status()
+    return request.app.state.templates.TemplateResponse(
+        request, "setup.html",
+        {"rows": rows, "version": APP_VERSION}
+    )
+
+
 # ── S3 cleanup dry-run ─────────────────────────────────────────────────
 
 
