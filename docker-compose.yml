@@ -6,13 +6,19 @@ services:
     env_file: .env
     command: python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - app_data:/app/data
       - app_logs:/app/logs
       - iac_state:/app/state/iac
       - iac_setup_logs:/app/logs/setup
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   worker-sqs:
     build: .
@@ -27,26 +33,17 @@ services:
     build: .
     env_file: .env
     command: python3 -m sender.smtp_server
+    ports:
+      - "127.0.0.1:${SMTP_PORT:-2525}:2525"
     volumes:
       - app_data:/app/data
       - app_logs:/app/logs
     restart: unless-stopped
 
-  # ── Dovecot / Postfix — planned for G.2 ──────────────────────────────
-  # dovecot:
-  #   image: dovecot/dovecot:latest
-  #   ports:
-  #     - "127.0.0.1:${IMAP_PORT:-143}:143"
-  #   volumes:
-  #     - app_data:/app/data
-  #     - ./docker/dovecot:/etc/dovecot/local:ro
+  # ── Dovecot / Postfix — planned for G.2.x ───────────────────────────
   #
-  # postfix:
-  #   image: boky/postfix:latest
-  #   ports:
-  #     - "127.0.0.1:${SMTP_PORT:-2525}:25"
-  #   volumes:
-  #     - ./docker/postfix:/etc/postfix/local:ro
+  # These services require further configuration and testing before
+  # they can be enabled in the default stack. See docs/deploy-docker.md.
 
 volumes:
   app_data:

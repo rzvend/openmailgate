@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}About — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>About</h1>
+
+<div class="card">
+    <table>
+        <tr><td><strong>App</strong></td><td>SES S3 Mailbox</td></tr>
+        <tr><td><strong>Version</strong></td><td>{{ version }}</td></tr>
+        <tr><td><strong>Status</strong></td><td><span class="badge badge-master_copy">alpha</span></td></tr>
+    </table>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+    <p>Self-hosted multi-mailbox administration using Amazon SES, S3, SQS, Dovecot, Thunderbird, and a FastAPI dashboard.</p>
+</div>
+
+<div class="card" style="margin-top: 16px; background: #fff3cd;">
+    <p><strong>Alpha software.</strong></p>
+    <ul>
+        <li>Review Terraform/OpenTofu plans before applying.</li>
+        <li>Protect <code>.env</code> — it contains secrets.</li>
+        <li>Backup your database, Maildir, and Terraform state regularly.</li>
+    </ul>
+</div>
+
+<h2>Documentation</h2>
+<div class="card">
+    <p>See the <code>docs/</code> directory for detailed guides:</p>
+    <ul>
+        <li><code>docs/deploy-docker.md</code> — Deploy with Docker</li>
+        <li><code>docs/backup-restore.md</code> — Backup and Restore</li>
+        <li><code>docs/admin-dashboard.md</code> — Admin Dashboard</li>
+        <li><code>docs/operations.md</code> — Operations</li>
+        <li><code>docs/s3-lifecycle.md</code> — S3 Lifecycle</li>
+    </ul>
+</div>
+
+{% if support_url %}
+<div style="margin-top: 16px;">
+    <a href="{{ support_url }}" target="_blank">{{ support_label or 'Support' }}</a>
+</div>
+{% endif %}
+{% endblock %}

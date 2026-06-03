@@ -1,0 +1,85 @@
+# Docker Deployment
+
+> **Alpha software.** Review Terraform/OpenTofu plans before applying. Backup your data.
+
+## Prerequisites
+
+- Docker and Docker Compose
+- AWS account with SES, S3, and SQS
+- Cloudflare account with DNS zone (optional for first-run)
+
+## Quick Start
+
+```bash
+# Clone
+git clone <repo-url> ses-s3-mailbox
+cd ses-s3-mailbox
+
+# Configure
+cp .env.example .env
+# Edit .env — fill in required values (see .env.example comments)
+
+# Start
+docker compose build
+docker compose run --rm api python3 worker/migrate.py
+docker compose up -d
+docker compose ps
+```
+
+Open `http://localhost:8000/dashboard` and log in with the operator created during setup.
+
+## Setup Workflow
+
+1. **Environment variables**: `/dashboard/setup` — check configured/missing vars
+2. **Credentials**: `/dashboard/setup/credentials` — validate AWS/Cloudflare
+3. **Infrastructure**: `/dashboard/setup/iac` — run Terraform/OpenTofu init/plan/apply
+4. **Validation**: `/dashboard/setup/validate` — verify AWS, S3, SQS, SES, Cloudflare
+5. **First mailbox**: `/dashboard/setup/first-mailbox` — create mailbox and get Thunderbird settings
+
+## Services
+
+| Service | Port (host) | Description |
+|---|---|---|
+| API | `127.0.0.1:8000` | Dashboard and JSON API |
+| SMTP sender | `127.0.0.1:2525` | Local SMTP relay for Thunderbird |
+| Worker SQS | — | Consumes SQS events from S3 |
+
+## Day-to-day Commands
+
+```bash
+docker compose up -d                # start
+docker compose down                 # stop
+docker compose logs -f api          # view logs
+docker compose restart api          # restart API
+docker compose run --rm api python3 worker/migrate.py  # migrate
+docker compose ps                   # status
+```
+
+## Thunderbird Settings
+
+| Field | Value |
+|---|---|
+| IMAP Server | Host IP or `10.10.10.16` |
+| IMAP Port | 143 (Dovecot on host) |
+| IMAP Security | STARTTLS |
+| Username | Full email address |
+| SMTP Server | Host IP or `10.10.10.16` |
+| SMTP Port | 2525 |
+| SMTP Security | None |
+
+## Limitations (alpha)
+
+- **Dovecot runs on the host**, not in Docker. IMAP port 143 must be accessible from the host.
+- **IMAP user sync** (`sync-imap-users --apply`) must run on the host with sudo.
+- **Terraform/OpenTofu** automation is alpha. Review plans before applying.
+- **Postfix/SMTP relay** is not containerized; the host runs `smtp_server.py` directly.
+- **No HTTPS/TLS termination** is provided. Use a reverse proxy (Caddy, Nginx) for production.
+
+## Security
+
+```
+chmod 600 .env
+# Never commit .env, data/, terraform state, or backups.
+# Backup terraform state and database regularly.
+# See docs/backup-restore.md.
+```

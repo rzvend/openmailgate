@@ -1216,6 +1216,23 @@ def system_status(request: Request):
     )
 
 
+# ── about ───────────────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/about")
+def about_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    from config import APP_VERSION
+    import os as _os
+    support_url = _os.getenv("APP_SUPPORT_URL", "")
+    support_label = _os.getenv("APP_SUPPORT_LABEL", "Support")
+    return request.app.state.templates.TemplateResponse(
+        request, "about.html",
+        {"version": APP_VERSION, "support_url": support_url, "support_label": support_label}
+    )
+
+
 # ── IMAP sync ──────────────────────────────────────────────────────────
 
 
