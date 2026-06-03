@@ -337,6 +337,36 @@ def test_main_create_link_points_to_wizard():
     assert '/dashboard/mailboxes/wizard' in r.text
 
 
+# ── system status tests ───────────────────────────────────────────────
+
+
+def test_status_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/status", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_status_page_loads():
+    _login()
+    r = client.get("/dashboard/status")
+    assert r.status_code == 200
+    assert "System Status" in r.text
+    assert "SQLite" in r.text
+
+
+def test_status_page_shows_version():
+    _login()
+    r = client.get("/dashboard/status")
+    assert "0.1.0-dev" in r.text
+
+
+def test_status_page_no_secrets():
+    _login()
+    r = client.get("/dashboard/status")
+    for secret in ("password_hash", "imap_password_hash", "AWS_SECRET", "CLOUDFLARE_API_TOKEN"):
+        assert secret not in r.text
+
+
 # ── mailbox wizard tests ──────────────────────────────────────────────
 
 

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Status — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>System Status</h1>
+
+<p class="muted">Version {{ version }} · Checked at {{ checked_at }}</p>
+<p class="muted">Basic operational diagnostics. Does not replace logs or full monitoring.</p>
+
+<div class="card" style="margin-top: 16px;">
+<table>
+    <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for c in checks %}
+    <tr>
+        <td>{{ c.name }}</td>
+        <td>
+            {% if c.status == 'active' or c.status == 'ok' %}
+                <span class="badge badge-active">{{ c.status }}</span>
+            {% elif c.status == 'inactive' or c.status == 'error' %}
+                <span class="badge badge-inactive">{{ c.status }}</span>
+            {% else %}
+                <span class="badge badge-fallback">{{ c.status }}</span>
+            {% endif %}
+        </td>
+        <td class="muted"><code>{{ c.detail }}</code></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

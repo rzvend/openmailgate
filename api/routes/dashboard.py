@@ -545,6 +545,64 @@ def catch_all_clear(request: Request):
     return RedirectResponse(url="/dashboard/catch-all", status_code=302)
 
 
+# ── system status ──────────────────────────────────────────────────────
+
+
+def _check_systemd(service):
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", service],
+            capture_output=True, text=True, timeout=2, shell=False,
+        )
+        out = result.stdout.strip()
+        return out if out else "unknown"
+    except Exception:
+        return "unknown"
+
+
+@router.get("/dashboard/status")
+def system_status(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    from config import APP_VERSION, MAILDIR_BASE, DB_PATH
+    from datetime import datetime, timezone
+    import sqlite3
+
+    checks = []
+
+    # SQLite
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("SELECT 1")
+        conn.close()
+        checks.append({"name": "SQLite", "status": "ok", "detail": str(DB_PATH)})
+    except Exception as e:
+        checks.append({"name": "SQLite", "status": "error", "detail": str(e)})
+
+    # Maildir
+    try:
+        if MAILDIR_BASE.exists():
+            checks.append({"name": "Maildir", "status": "ok", "detail": str(MAILDIR_BASE)})
+        else:
+            checks.append({"name": "Maildir", "status": "error", "detail": "missing"})
+    except Exception:
+        checks.append({"name": "Maildir", "status": "error", "detail": "error"})
+
+    # Systemd services
+    for svc in ("ses-s3-mailbox-api", "ses-s3-mailbox-sqs-worker",
+                "ses-s3-mailbox-smtp-sender", "dovecot"):
+        state = _check_systemd(svc)
+        checks.append({"name": svc, "status": state, "detail": state})
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    return request.app.state.templates.TemplateResponse(
+        request, "status.html",
+        {"checks": checks, "version": APP_VERSION, "checked_at": now}
+    )
+
+
 # ── IMAP sync ──────────────────────────────────────────────────────────
 
 
