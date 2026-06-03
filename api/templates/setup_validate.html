@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Setup Validation — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Setup Validation</h1>
+
+<div class="card">
+    <p>This page performs <strong>read-only checks</strong> to verify that AWS and Cloudflare resources are accessible.</p>
+    <p>No cloud resources are created. No DNS records are changed. No Terraform/OpenTofu commands are executed.</p>
+</div>
+
+<form method="post" action="/dashboard/setup/validate/run" style="margin-bottom: 16px;">
+    <button type="submit" style="padding: 8px 20px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Run validation</button>
+    <a href="/dashboard/setup" class="muted" style="margin-left: 12px;">Back to setup</a>
+</form>
+
+{% if results %}
+<table>
+    <thead><tr><th>Group</th><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for r in results %}
+    <tr>
+        <td>{{ r.group }}</td>
+        <td>{{ r.name }}</td>
+        <td>
+            {% if r.status == 'ok' %}
+                <span class="badge badge-active">ok</span>
+            {% elif r.status == 'warning' %}
+                <span class="badge badge-master_copy">warning</span>
+            {% elif r.status == 'error' %}
+                <span class="badge badge-inactive">error</span>
+            {% else %}
+                <span class="badge badge-fallback">{{ r.status }}</span>
+            {% endif %}
+        </td>
+        <td class="muted">{{ r.detail }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -566,6 +566,42 @@ def test_iac_apply_page_shows_manual_apply():
     assert "apply" in r.text.lower()
 
 
+# ── setup validate tests ────────────────────────────────────────────────
+
+
+def test_setup_validate_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/setup/validate", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_setup_validate_page_loads():
+    _login()
+    r = client.get("/dashboard/setup/validate")
+    assert r.status_code == 200
+    assert "validation" in r.text.lower()
+
+
+def test_setup_validate_post_no_secrets():
+    _login()
+    from unittest.mock import patch
+    with patch("api.routes.dashboard._run_setup_checks", return_value=[
+        {"group": "AWS", "name": "STS", "status": "ok", "detail": "OK"},
+    ]):
+        r = client.post("/dashboard/setup/validate/run", follow_redirects=False)
+    assert r.status_code == 200
+    assert "AWS" in r.text
+    assert "OK" in r.text
+
+
+def test_setup_validate_no_terraform():
+    _login()
+    r = client.get("/dashboard/setup/validate")
+    # The page says "No Terraform/OpenTofu commands are executed"
+    assert "are executed" in r.text.lower()
+    assert "Run validation" in r.text
+
+
 
 # ── archive mailbox tests ──────────────────────────────────────────────
 

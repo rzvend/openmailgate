@@ -784,6 +784,113 @@ def _render_iac(request, tool, workdir, output, error):
         {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
          "output": output, "error": error}
     )
+
+
+def _run_setup_checks():
+    """Run read-only validation checks against AWS/Cloudflare. Returns list of dicts."""
+    results = []
+    region = _os.getenv("AWS_REGION", "")
+    bucket = _os.getenv("S3_BUCKET", "")
+    queue_url = _os.getenv("SQS_QUEUE_URL", "")
+    cf_token = _os.getenv("CLOUDFLARE_API_TOKEN", "")
+    cf_zone = _os.getenv("CLOUDFLARE_ZONE_ID", "")
+    mail_domain = _os.getenv("DEFAULT_FROM_DOMAIN", "")
+
+    # AWS STS
+    try:
+        import boto3
+        sts = boto3.client("sts", region_name=region or "us-east-1")
+        sts.get_caller_identity()
+        results.append({"group": "AWS", "name": "STS caller identity", "status": "ok", "detail": "Credentials valid"})
+    except Exception as e:
+        msg = str(e).split(":")[-1].strip()
+        results.append({"group": "AWS", "name": "STS caller identity", "status": "error", "detail": msg})
+
+    # S3
+    if bucket:
+        try:
+            s3 = boto3.client("s3", region_name=region or "us-east-1")
+            s3.head_bucket(Bucket=bucket)
+            results.append({"group": "S3", "name": "Bucket", "status": "ok", "detail": bucket})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "S3", "name": "Bucket", "status": "error", "detail": msg})
+    else:
+        results.append({"group": "S3", "name": "Bucket", "status": "skipped", "detail": "S3_BUCKET not configured"})
+
+    # SQS
+    if queue_url:
+        try:
+            sqs = boto3.client("sqs", region_name=region or "us-east-1")
+            sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])
+            results.append({"group": "SQS", "name": "Queue", "status": "ok", "detail": "Queue accessible"})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "SQS", "name": "Queue", "status": "error", "detail": msg})
+    else:
+        results.append({"group": "SQS", "name": "Queue", "status": "skipped", "detail": "SQS_QUEUE_URL not configured"})
+
+    # SES
+    if mail_domain:
+        try:
+            ses = boto3.client("ses", region_name=region or "us-east-1")
+            attrs = ses.get_identity_verification_attributes(Identities=[mail_domain])
+            status = attrs.get("VerificationAttributes", {}).get(mail_domain, {}).get("VerificationStatus", "unknown")
+            results.append({"group": "SES", "name": "Domain identity", "status": "ok" if status == "Success" else "warning", "detail": status})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "SES", "name": "Domain identity", "status": "error", "detail": msg})
+    else:
+        results.append({"group": "SES", "name": "Domain identity", "status": "skipped", "detail": "Domain not configured"})
+
+    # Cloudflare
+    if cf_token and cf_zone:
+        try:
+            import httpx
+            r = httpx.get(
+                f"https://api.cloudflare.com/client/v4/zones/{cf_zone}",
+                headers={"Authorization": f"Bearer {cf_token}"},
+                timeout=10,
+            )
+            if r.status_code == 200 and r.json().get("success"):
+                results.append({"group": "Cloudflare", "name": "Zone", "status": "ok", "detail": "Zone accessible"})
+            else:
+                results.append({"group": "Cloudflare", "name": "Zone", "status": "error", "detail": f"HTTP {r.status_code}"})
+        except Exception as e:
+            results.append({"group": "Cloudflare", "name": "Zone", "status": "error", "detail": str(e).split(":")[-1].strip()})
+    else:
+        results.append({"group": "Cloudflare", "name": "Zone", "status": "skipped", "detail": "Token or zone ID missing"})
+
+    # DNS — deferred (no dnspython dependency)
+    results.append({"group": "DNS", "name": "MX/TXT records", "status": "skipped", "detail": "Advanced DNS validation deferred"})
+
+    return results
+
+
+@router.get("/dashboard/setup/validate")
+def setup_validate_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_validate.html", {"results": None}
+    )
+
+
+@router.post("/dashboard/setup/validate/run")
+def setup_validate_run(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    results = _run_setup_checks()
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_validate.html", {"results": results}
+    )
+    state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
+    log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_iac.html",
+        {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
+         "output": output, "error": error}
+    )
     _auth = require_login(request)
     if _auth: return _auth
     return request.app.state.templates.TemplateResponse(
