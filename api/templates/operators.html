@@ -3,6 +3,10 @@
 {% block content %}
 <h1>Operators</h1>
 
+<div style="margin-bottom: 12px;">
+    <a href="/dashboard/operators/new" style="padding: 6px 14px; background: #27ae60; color: #fff; border-radius: 4px; text-decoration: none;">+ New operator</a>
+</div>
+
 <table>
     <thead>
         <tr>
@@ -26,7 +30,7 @@
             </td>
             <td>{{ op.mailbox_count }}</td>
             <td class="muted">{{ op.created_at }}</td>
-            <td><a href="/dashboard/mailboxes/master">mailboxes</a></td>
+            <td><a href="/dashboard/operators/{{ op.username }}">view</a></td>
         </tr>
     {% endfor %}
     </tbody>

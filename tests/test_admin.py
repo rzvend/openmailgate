@@ -193,9 +193,86 @@ def test_imap_sync_dry_run_hashes_masked():
     assert response.status_code == 200
     text = response.text
     import re
-    # Any SHA512-CRYPT hash that is NOT masked (no ****) is a problem
     unmasked = re.findall(r'\{SHA512-CRYPT\}\$6\$[^:*]{30,}', text)
     assert len(unmasked) == 0, f"Unmasked hashes found: {unmasked[:3]}"
+
+
+# ── operator management tests ─────────────────────────────────────────
+
+
+def test_operator_new_route_not_captured():
+    _login()
+    r = client.get("/dashboard/operators/new")
+    assert r.status_code == 200
+    assert "New Operator" in r.text
+
+
+def test_operator_new_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/operators/new", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_create_operator_success():
+    import uuid
+    _login()
+    u = f"testop{uuid.uuid4().hex[:6]}"
+    r = client.post("/dashboard/operators/new", data={
+        "username": u, "password": "12345678", "confirm": "12345678", "active": "1",
+    }, follow_redirects=False)
+    assert r.status_code == 302
+    assert f"/dashboard/operators/{u}" in r.headers.get("location", "")
+
+
+def test_create_operator_password_mismatch():
+    _login()
+    r = client.post("/dashboard/operators/new", data={
+        "username": "testop2", "password": "12345678", "confirm": "87654321",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "do not match" in r.text
+
+
+def test_create_operator_duplicate():
+    _login()
+    r = client.post("/dashboard/operators/new", data={
+        "username": "ricardo", "password": "12345678", "confirm": "12345678",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "already exists" in r.text
+
+
+def test_operator_detail_loads():
+    _login()
+    r = client.get("/dashboard/operators/ricardo")
+    assert r.status_code == 200
+    assert "ricardo" in r.text
+    assert "password_hash" not in r.text
+
+
+def test_grant_mailbox_success():
+    _login()
+    r = client.post("/dashboard/operators/ricardo/grant", data={
+        "mailbox_id": "1", "role": "viewer",
+    }, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_revoke_mailbox_success():
+    _login()
+    # Grant first
+    client.post("/dashboard/operators/ricardo/grant", data={"mailbox_id": "1", "role": "viewer"})
+    r = client.post("/dashboard/operators/ricardo/revoke", data={
+        "mailbox_id": "1",
+    }, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_operator_templates_no_password_hash():
+    _login()
+    r = client.get("/dashboard/operators/ricardo")
+    assert "password_hash" not in r.text
+    assert "{SHA512-CRYPT}" not in r.text
 
 
 # ── mailbox wizard tests ──────────────────────────────────────────────

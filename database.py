@@ -293,3 +293,96 @@ def set_email_address_active(address_id, active):
     conn.commit()
     conn.close()
     return dict(row) if row else None
+
+
+# ── operator write helpers ─────────────────────────────────────────────
+
+
+def create_operator(username, password_hash, active=True):
+    """Create an operator. Returns dict or raises ValueError."""
+    conn = get_conn()
+    dup = conn.execute("SELECT id FROM operators WHERE username = ?", (username,)).fetchone()
+    if dup:
+        conn.close()
+        raise ValueError("operator username already exists")
+    conn.execute(
+        "INSERT INTO operators (username, password_hash, is_active) VALUES (?, ?, ?)",
+        (username, password_hash, int(active)),
+    )
+    op_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.commit()
+    conn.close()
+    return {"id": op_id, "username": username, "is_active": int(active)}
+
+
+def get_operator_detail(username):
+    """Return operator detail (without password_hash) + permissions + mailbox count."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, username, is_active, created_at FROM operators WHERE username = ?", (username,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    op = dict(row)
+    perms = conn.execute(
+        "SELECT m.id AS mailbox_id, m.slug, m.name, om.role "
+        "FROM operator_mailboxes om JOIN mailboxes m ON m.id = om.mailbox_id "
+        "WHERE om.operator_id = ? ORDER BY m.slug", (op["id"],)
+    ).fetchall()
+    op["mailboxes"] = [dict(p) for p in perms]
+    conn.close()
+    return op
+
+
+def count_active_operators():
+    conn = get_conn()
+    n = conn.execute("SELECT COUNT(*) FROM operators WHERE is_active = 1").fetchone()[0]
+    conn.close()
+    return n
+
+
+def set_operator_active(username, active):
+    """Set is_active on an operator. Returns dict or None."""
+    conn = get_conn()
+    conn.execute("UPDATE operators SET is_active = ? WHERE username = ?", (int(active), username))
+    row = conn.execute(
+        "SELECT id, username, is_active FROM operators WHERE username = ?", (username,)
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_operator_password_hash(username, password_hash):
+    conn = get_conn()
+    conn.execute("UPDATE operators SET password_hash = ? WHERE username = ?", (password_hash, username))
+    conn.commit()
+    conn.close()
+
+
+def grant_operator_mailbox(username, mailbox_id, role):
+    conn = get_conn()
+    op = conn.execute("SELECT id FROM operators WHERE username = ?", (username,)).fetchone()
+    if not op:
+        conn.close()
+        raise ValueError("operator not found")
+    conn.execute(
+        "INSERT INTO operator_mailboxes (operator_id, mailbox_id, role) VALUES (?, ?, ?) "
+        "ON CONFLICT(operator_id, mailbox_id) DO UPDATE SET role = excluded.role",
+        (op[0], mailbox_id, role),
+    )
+    conn.commit()
+    conn.close()
+
+
+def revoke_operator_mailbox(username, mailbox_id):
+    conn = get_conn()
+    op = conn.execute("SELECT id FROM operators WHERE username = ?", (username,)).fetchone()
+    if not op:
+        conn.close()
+        raise ValueError("operator not found")
+    conn.execute("DELETE FROM operator_mailboxes WHERE operator_id = ? AND mailbox_id = ?",
+                 (op[0], mailbox_id))
+    conn.commit()
+    conn.close()

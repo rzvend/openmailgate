@@ -15,7 +15,9 @@ import worker.dovecot_users as du
 from api.auth import require_login
 from config import DB_PATH, MAILDIR_BASE
 from database import (
+    count_active_operators,
     create_mailbox_with_address,
+    create_operator,
     get_email_address,
     get_mailbox_addresses,
     get_mailbox_by_slug,
@@ -26,12 +28,17 @@ from database import (
     get_message_mailboxes,
     get_message_notes,
     get_messages_by_mailbox,
+    get_operator_detail,
     get_operator_mailboxes,
     get_operator_name,
     get_operators,
+    grant_operator_mailbox,
+    revoke_operator_mailbox,
     set_email_address_active,
     set_mailbox_active,
+    set_operator_active,
     update_email_address_imap_password_hash,
+    update_operator_password_hash,
 )
 
 router = APIRouter(tags=["dashboard"])
@@ -236,6 +243,154 @@ def dashboard_message(request: Request, message_id: int):
             "notes": notes, "assigned_name": assigned_name,
         }
     )
+
+
+# ── operator management ───────────────────────────────────────────────
+
+
+@router.get("/dashboard/operators/new")
+def operator_new_form(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "operator_new.html", {"error": None, "mailboxes": get_mailboxes()}
+    )
+
+
+@router.post("/dashboard/operators/new")
+def operator_create(request: Request, username: str = Form(""), password: str = Form(""),
+                    confirm: str = Form(""), active: bool = Form(True)):
+    _auth = require_login(request)
+    if _auth: return _auth
+    error = _validate_operator(username, password, confirm, new_username=None)
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "operator_new.html", {"error": error, "mailboxes": get_mailboxes()}
+        )
+    try:
+        hashed = _gen_operator_hash(password)
+    except Exception:
+        return request.app.state.templates.TemplateResponse(
+            request, "operator_new.html", {"error": "Failed to generate password hash.", "mailboxes": get_mailboxes()}
+        )
+    try:
+        create_operator(username.strip().lower(), hashed, active=active)
+    except ValueError as e:
+        return request.app.state.templates.TemplateResponse(
+            request, "operator_new.html", {"error": str(e), "mailboxes": get_mailboxes()}
+        )
+    return RedirectResponse(url=f"/dashboard/operators/{username.strip().lower()}", status_code=302)
+
+
+@router.get("/dashboard/operators/{username}")
+def operator_detail(request: Request, username: str):
+    _auth = require_login(request)
+    if _auth: return _auth
+    op = get_operator_detail(username.lower().strip())
+    if not op:
+        raise HTTPException(status_code=404, detail="operator not found")
+    all_mailboxes = get_mailboxes()
+    return request.app.state.templates.TemplateResponse(
+        request, "operator_detail.html",
+        {"op": op, "mailboxes": all_mailboxes, "error": None}
+    )
+
+
+@router.post("/dashboard/operators/{username}/password")
+def operator_set_password(request: Request, username: str,
+                          password: str = Form(""), confirm: str = Form("")):
+    _auth = require_login(request)
+    if _auth: return _auth
+    op = get_operator_detail(username.lower().strip())
+    if not op:
+        raise HTTPException(status_code=404, detail="operator not found")
+    if len(password) < 8:
+        error = "Password must be at least 8 characters."
+    elif password != confirm:
+        error = "Passwords do not match."
+    else:
+        try:
+            hashed = _gen_operator_hash(password)
+            update_operator_password_hash(username.lower().strip(), hashed)
+            return RedirectResponse(url=f"/dashboard/operators/{username.lower().strip()}", status_code=302)
+        except Exception:
+            error = "Failed to generate password hash."
+    return request.app.state.templates.TemplateResponse(
+        request, "operator_detail.html",
+        {"op": op, "mailboxes": get_mailboxes(), "error": error}
+    )
+
+
+@router.post("/dashboard/operators/{username}/disable")
+def operator_disable(request: Request, username: str):
+    _auth = require_login(request)
+    if _auth: return _auth
+    if count_active_operators() <= 1:
+        return RedirectResponse(url=f"/dashboard/operators/{username}", status_code=302)
+    set_operator_active(username.lower().strip(), False)
+    return RedirectResponse(url=f"/dashboard/operators/{username.lower().strip()}", status_code=302)
+
+
+@router.post("/dashboard/operators/{username}/enable")
+def operator_enable(request: Request, username: str):
+    _auth = require_login(request)
+    if _auth: return _auth
+    set_operator_active(username.lower().strip(), True)
+    return RedirectResponse(url=f"/dashboard/operators/{username.lower().strip()}", status_code=302)
+
+
+@router.post("/dashboard/operators/{username}/grant")
+def operator_grant(request: Request, username: str,
+                   mailbox_id: int = Form(...), role: str = Form("viewer")):
+    _auth = require_login(request)
+    if _auth: return _auth
+    if role not in ("viewer", "admin"):
+        role = "viewer"
+    try:
+        grant_operator_mailbox(username.lower().strip(), mailbox_id, role)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="operator not found")
+    return RedirectResponse(url=f"/dashboard/operators/{username.lower().strip()}", status_code=302)
+
+
+@router.post("/dashboard/operators/{username}/revoke")
+def operator_revoke(request: Request, username: str, mailbox_id: int = Form(...)):
+    _auth = require_login(request)
+    if _auth: return _auth
+    try:
+        revoke_operator_mailbox(username.lower().strip(), mailbox_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="operator not found")
+    return RedirectResponse(url=f"/dashboard/operators/{username.lower().strip()}", status_code=302)
+
+
+def _validate_operator(username, password, confirm, new_username):
+    username = username.strip().lower()
+    if not username or not password:
+        return "All fields are required."
+    if not re.match(r"^[a-z0-9_.-]+$", username):
+        return "Invalid username — use lowercase letters, numbers, dot, hyphen, underscore."
+    if len(username) < 3:
+        return "Username must be at least 3 characters."
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+    if password != confirm:
+        return "Passwords do not match."
+    return None
+
+
+def _gen_operator_hash(password):
+    result = subprocess.run(
+        ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+        input=f"{password}\n{password}",
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("doveadm pw failed")
+    hashed = result.stdout.strip().split("\n")[-1]
+    if not hashed.startswith("{"):
+        raise RuntimeError("unexpected hash output")
+    return hashed
 
 
 @router.get("/dashboard/operators")
