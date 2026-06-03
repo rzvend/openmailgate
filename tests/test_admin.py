@@ -473,12 +473,12 @@ def test_setup_credentials_env_shows_status():
 def test_setup_credentials_temporary_no_echo():
     _login()
     r = client.post("/dashboard/setup/credentials/check",
-                    data={"source": "temporary", "aws_key": "AKIA_TEST", "aws_secret": "SUPER_SECRET"},
+                    data={"source": "temporary", "aws_key": "TEST_AWS_ACCESS_KEY", "aws_secret": "SUPER_SECRET"},
                     follow_redirects=False)
     assert r.status_code == 200
     # Secrets must not appear in response
     assert "SUPER_SECRET" not in r.text
-    assert "AKIA_TEST" not in r.text
+    assert "TEST_AWS_ACCESS_KEY" not in r.text
 
 
 def test_setup_credentials_post_shows_no_cloud_created():
@@ -487,6 +487,43 @@ def test_setup_credentials_post_shows_no_cloud_created():
                     data={"source": "env"}, follow_redirects=False)
     assert "No cloud resources were created" in r.text
     assert "No secrets were stored" in r.text
+
+
+# ── setup IAC tests ─────────────────────────────────────────────────────
+
+
+def test_setup_iac_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/setup/iac", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_setup_iac_page_loads():
+    _login()
+    r = client.get("/dashboard/setup/iac")
+    assert r.status_code == 200
+    assert "Infrastructure Setup" in r.text
+    assert "Manual Mode" in r.text
+
+
+def test_sanitize_setup_log_masks_secrets():
+    from api.routes.dashboard import _sanitize_setup_log
+    result = _sanitize_setup_log("AWS_SECRET_ACCESS_KEY=TEST_SECRET_VALUE")
+    assert "***MASKED***" in result
+    assert "TEST_SECRET_VALUE" not in result
+
+
+def test_setup_iac_page_no_apply():
+    _login()
+    r = client.get("/dashboard/setup/iac")
+    assert "This page does not run apply" in r.text
+
+
+def test_setup_iac_shows_manual_mode():
+    _login()
+    r = client.get("/dashboard/setup/iac")
+    assert "init" in r.text.lower()
+    assert "plan" in r.text.lower()
 
 
 

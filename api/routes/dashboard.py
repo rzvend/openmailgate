@@ -627,6 +627,136 @@ def setup_credentials_page(request: Request):
         request, "setup_credentials.html", {"result": None, "error": None}
     )
 
+import re as _re
+import os as _os
+import subprocess as _sp
+import fcntl as _fcntl
+
+
+def _sanitize_setup_log(text):
+    """Mask sensitive values in setup command output."""
+    secrets = [
+        _os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+        _os.getenv("AWS_ACCESS_KEY_ID", ""),
+        _os.getenv("CLOUDFLARE_API_TOKEN", ""),
+        _os.getenv("SESSION_SECRET", ""),
+    ]
+    for s in secrets:
+        if s and len(s) > 4:
+            text = text.replace(s, "***MASKED***")
+    # Also mask key=value patterns
+    text = _re.sub(r'(AWS_SECRET_ACCESS_KEY\s*=\s*)\S+', r'\1***MASKED***', text)
+    text = _re.sub(r'(CLOUDFLARE_API_TOKEN\s*=\s*)\S+', r'\1***MASKED***', text)
+    return text
+
+
+_IAC_LOCK_FILE = "/app/logs/setup/iac.lock"
+
+
+def _acquire_iac_lock():
+    try:
+        lock_dir = _os.path.dirname(_IAC_LOCK_FILE)
+        if lock_dir and not _os.path.exists(lock_dir):
+            _os.makedirs(lock_dir, exist_ok=True)
+        lf = open(_IAC_LOCK_FILE, "w")
+        _fcntl.flock(lf.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        return lf
+    except (OSError, IOError):
+        return None
+
+
+def _release_iac_lock(lf):
+    if lf:
+        try:
+            _fcntl.flock(lf.fileno(), _fcntl.LOCK_UN)
+            lf.close()
+        except Exception:
+            pass
+
+
+def _run_iac_command(tool, args, workdir, env):
+    binary = tool  # "terraform" or "tofu"
+    try:
+        result = _sp.run(
+            [binary] + args,
+            capture_output=True, text=True, timeout=120,
+            cwd=workdir, env=env, shell=False,
+        )
+        output = result.stdout + result.stderr
+        return result.returncode, _sanitize_setup_log(output)
+    except FileNotFoundError:
+        return -1, f"ERROR: {binary} binary not found. Install {tool} or check IAC_TOOL."
+    except Exception as e:
+        return -1, f"ERROR: {e}"
+
+
+@router.get("/dashboard/setup/iac")
+def setup_iac_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
+    log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_iac.html",
+        {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
+         "output": None, "error": None}
+    )
+
+
+@router.post("/dashboard/setup/iac/init")
+def setup_iac_init(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    lock = _acquire_iac_lock()
+    if not lock:
+        return _render_iac(request, tool, workdir, output=None,
+                           error="Another IAC job is already running.")
+    try:
+        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        code, output = _run_iac_command(tool, ["init", "-no-color"], workdir, env)
+        return _render_iac(request, tool, workdir, output=output, error=None)
+    finally:
+        _release_iac_lock(lock)
+
+
+@router.post("/dashboard/setup/iac/plan")
+def setup_iac_plan(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
+    lock = _acquire_iac_lock()
+    if not lock:
+        return _render_iac(request, tool, workdir, output=None,
+                           error="Another IAC job is already running.")
+    try:
+        plan_file = f"{state_dir}/last.tfplan"
+        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        code, output = _run_iac_command(tool, ["plan", "-no-color", "-out", plan_file], workdir, env)
+        return _render_iac(request, tool, workdir, output=output, error=None)
+    finally:
+        _release_iac_lock(lock)
+
+
+def _render_iac(request, tool, workdir, output, error):
+    state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
+    log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_iac.html",
+        {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
+         "output": output, "error": error}
+    )
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_credentials.html", {"result": None, "error": None}
+    )
+
 
 @router.post("/dashboard/setup/credentials/check")
 def setup_credentials_check(

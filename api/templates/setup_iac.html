@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Infrastructure Setup — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Infrastructure Setup</h1>
+
+<div class="card">
+    <p><strong>Tool:</strong> {{ tool }} &nbsp; <strong>Workdir:</strong> <code>{{ workdir }}</code></p>
+    <p><strong>State dir:</strong> <code>{{ state_dir }}</code> &nbsp; <strong>Log dir:</strong> <code>{{ log_dir }}</code></p>
+</div>
+
+<div class="card" style="background: #fff3cd;">
+    <p><strong>Alpha automation.</strong> Review the plan before applying.</p>
+    <p><strong>This page does not run apply.</strong> No cloud resources are created by this step.</p>
+</div>
+
+<div style="margin-bottom: 12px;">
+    <form method="post" action="/dashboard/setup/iac/init" style="display: inline;">
+        <button type="submit" style="padding: 8px 20px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Run init</button>
+    </form>
+    <form method="post" action="/dashboard/setup/iac/plan" style="display: inline; margin-left: 8px;">
+        <button type="submit" style="padding: 8px 20px; background: #27ae60; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Run plan</button>
+    </form>
+</div>
+
+{% if error %}
+<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>
+{% endif %}
+
+{% if output %}
+<div class="card" style="margin-top: 16px;">
+    <strong>Output (sanitized):</strong>
+    <pre style="white-space: pre-wrap; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto;">{{ output }}</pre>
+</div>
+{% endif %}
+
+<h2 style="margin-top: 24px;">Manual Mode</h2>
+<div class="card">
+    <p>Run these commands outside the dashboard:</p>
+    <pre style="background: #f9f9f9; padding: 12px; border-radius: 4px;">cd {{ workdir }}
+{{ tool }} init
+{{ tool }} plan -out={{ state_dir }}/last.tfplan</pre>
+    <p class="muted">Apply must be run manually and is not available from the dashboard yet.</p>
+</div>
+
+<div style="margin-top: 16px;">
+    <a href="/dashboard/setup">← Back to setup</a>
+</div>
+{% endblock %}
