@@ -367,6 +367,49 @@ def test_status_page_no_secrets():
         assert secret not in r.text
 
 
+# ── S3 cleanup dashboard tests ─────────────────────────────────────────
+
+
+def test_s3_cleanup_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/s3-cleanup", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_s3_cleanup_page_loads():
+    _login()
+    r = client.get("/dashboard/s3-cleanup")
+    assert r.status_code == 200
+    assert "S3 Cleanup" in r.text
+    assert "dry-run" in r.text.lower()
+
+
+def test_s3_cleanup_dry_run_requires_login():
+    client.post("/auth/logout")
+    r = client.post("/dashboard/s3-cleanup/dry-run", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_s3_cleanup_dry_run_no_secrets():
+    _login()
+    from unittest.mock import patch
+    with patch("scripts.s3_cleanup_dry_run.list_candidates", return_value=([], 0, None)):
+        r = client.post("/dashboard/s3-cleanup/dry-run",
+                        data={"prefix": "processed/", "older_than_days": "30", "limit": "20"})
+    assert r.status_code == 200
+    for secret in ("AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "password_hash"):
+        assert secret not in r.text
+
+
+def test_s3_cleanup_dry_run_shows_warning_for_incoming():
+    _login()
+    from unittest.mock import patch
+    with patch("scripts.s3_cleanup_dry_run.list_candidates", return_value=([], 0, None)):
+        r = client.post("/dashboard/s3-cleanup/dry-run",
+                        data={"prefix": "incoming/", "older_than_days": "30", "limit": "20"})
+    assert "unprocessed" in r.text.lower() or "WARNING" in r.text
+
+
 # ── archive mailbox tests ──────────────────────────────────────────────
 
 

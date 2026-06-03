@@ -49,6 +49,46 @@ def warning_for_prefix(prefix):
 
 def build_report(bucket, prefix, older_than_days, candidates, scanned, limit):
     """Return a list of report lines (no AWS calls)."""
+
+
+# ── reusable: list candidates (for CLI *and* dashboard) ─────────────────
+
+
+def list_candidates(bucket, prefix, older_than_days, limit=20):
+    """Scan S3 and return (candidates, scanned_count, error_msg).
+
+    candidates: list of {"Key", "Size", "LastModified"}
+    scanned_count: total objects inspected
+    error_msg: None on success, or a user-friendly error string
+    Never calls delete_object / delete_objects.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    try:
+        import boto3
+        s3 = boto3.client("s3")
+    except Exception as e:
+        return [], 0, f"Cannot create S3 client: {e}"
+
+    candidates = []
+    scanned = 0
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                scanned += 1
+                lm = obj.get("LastModified")
+                if lm and is_candidate(lm, cutoff):
+                    candidates.append(
+                        {"Key": obj["Key"], "Size": obj.get("Size", 0), "LastModified": lm}
+                    )
+    except Exception as e:
+        return [], 0, str(e)
+
+    return candidates, scanned, None
+
+
+def build_report(bucket, prefix, older_than_days, candidates, scanned, limit):
+    """Return a list of report lines (no AWS calls)."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
     total_size = sum(c["Size"] for c in candidates)
     lines = []
@@ -88,30 +128,11 @@ def main():
     parser.add_argument("--limit", type=int, default=20)
     args = parser.parse_args()
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=args.older_than_days)
-
-    try:
-        import boto3
-        s3 = boto3.client("s3")
-    except Exception as e:
-        print(f"ERROR: cannot create S3 client: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    candidates = []
-    scanned = 0
-
-    try:
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=args.bucket, Prefix=args.prefix):
-            for obj in page.get("Contents", []):
-                scanned += 1
-                lm = obj.get("LastModified")
-                if lm and is_candidate(lm, cutoff):
-                    candidates.append(
-                        {"Key": obj["Key"], "Size": obj.get("Size", 0), "LastModified": lm}
-                    )
-    except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+    candidates, scanned, error = list_candidates(
+        args.bucket, args.prefix, args.older_than_days, args.limit
+    )
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
         sys.exit(1)
 
     for line in build_report(args.bucket, args.prefix, args.older_than_days,

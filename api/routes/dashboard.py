@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 import worker.dovecot_users as du
 
 from api.auth import require_login
-from config import DB_PATH, MAILDIR_BASE
+from config import DB_PATH, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX
 from database import (
     clear_catch_all_mailbox,
     clear_inbound_archive_mailbox,
@@ -549,6 +549,58 @@ def catch_all_clear(request: Request):
     if _auth: return _auth
     clear_catch_all_mailbox()
     return RedirectResponse(url="/dashboard/catch-all", status_code=302)
+
+
+# ── S3 cleanup dry-run ─────────────────────────────────────────────────
+
+
+@router.get("/dashboard/s3-cleanup")
+def s3_cleanup_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "s3_cleanup.html",
+        {"result": None, "error": None,
+         "default_prefix": S3_PROCESSED_PREFIX,
+         "default_bucket": S3_BUCKET}
+    )
+
+
+@router.post("/dashboard/s3-cleanup/dry-run")
+def s3_cleanup_dry_run(request: Request, prefix: str = Form(S3_PROCESSED_PREFIX),
+                       older_than_days: int = Form(30), limit: int = Form(20)):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    from scripts.s3_cleanup_dry_run import (
+        build_report, format_bytes, list_candidates, warning_for_prefix,
+    )
+
+    candidates, scanned, error = list_candidates(
+        S3_BUCKET, prefix, older_than_days, limit
+    )
+
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "s3_cleanup.html",
+            {"result": None, "error": f"Unable to run S3 dry-run: {error}",
+             "default_prefix": S3_PROCESSED_PREFIX, "default_bucket": S3_BUCKET}
+        )
+
+    lines = build_report(S3_BUCKET, prefix, older_than_days, candidates, scanned, limit)
+    result = {
+        "report": lines,
+        "candidates": candidates,
+        "bucket": S3_BUCKET, "prefix": prefix,
+        "older_than_days": older_than_days, "limit": limit,
+        "total_size": sum(c["Size"] for c in candidates),
+        "warning": warning_for_prefix(prefix),
+    }
+    return request.app.state.templates.TemplateResponse(
+        request, "s3_cleanup.html",
+        {"result": result, "error": None,
+         "default_prefix": S3_PROCESSED_PREFIX, "default_bucket": S3_BUCKET}
+    )
 
 
 # ── archive / audit ────────────────────────────────────────────────────

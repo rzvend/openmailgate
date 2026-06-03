@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}S3 Cleanup — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>S3 Cleanup Dry-run</h1>
+
+<div class="card">
+    <p>This page only performs a dry-run. <strong>No objects are deleted.</strong></p>
+</div>
+
+<form method="post" action="/dashboard/s3-cleanup/dry-run">
+    <div style="margin-bottom: 12px;">
+        <label for="prefix">Prefix:</label><br>
+        <select name="prefix" id="prefix" style="padding: 6px; width: 200px;">
+            <option value="processed/" {% if default_prefix == 'processed/' %}selected{% endif %}>processed/</option>
+            <option value="failed/" {% if default_prefix == 'failed/' %}selected{% endif %}>failed/</option>
+            <option value="incoming/" {% if default_prefix == 'incoming/' %}selected{% endif %}>incoming/</option>
+        </select>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label for="older_than_days">Older than days:</label><br>
+        <input type="number" name="older_than_days" value="30" min="1" style="padding: 6px; width: 100px;">
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label for="limit">Sample limit:</label><br>
+        <input type="number" name="limit" value="20" min="1" max="200" style="padding: 6px; width: 100px;">
+    </div>
+    <button type="submit" style="padding: 8px 20px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Run dry-run</button>
+</form>
+
+{% if error %}
+<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px; margin-top: 16px;">{{ error }}</p>
+{% endif %}
+
+{% if result %}
+<div class="card" style="margin-top: 16px;">
+    <pre style="white-space: pre-wrap; font-size: 13px;">{% for line in result.report %}{{ line }}
+{% endfor %}</pre>
+</div>
+
+{% if result.warning %}
+<p style="color: #856404; background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 12px;">{{ result.warning }}</p>
+{% endif %}
+
+{% if result.candidates %}
+<h2 style="margin-top: 16px;">Sample Candidates</h2>
+<table>
+    <thead><tr><th>Key</th><th>Last Modified</th><th>Size</th></tr></thead>
+    <tbody>
+    {% for c in result.candidates[:result.limit] %}
+    <tr>
+        <td class="muted"><code>{{ c.Key }}</code></td>
+        <td>{{ c.LastModified.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{% if c.Size >= 1024 %}{{ "%.1f"|format(c.Size / 1024) }} KB{% else %}{{ c.Size }} B{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endif %}
+{% endblock %}
