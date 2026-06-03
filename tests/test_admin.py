@@ -329,6 +329,14 @@ def test_resolver_uses_catch_all():
     clear_catch_all_mailbox()
 
 
+def test_main_create_link_points_to_wizard():
+    _login()
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    # The main create link should point to the wizard
+    assert '/dashboard/mailboxes/wizard' in r.text
+
+
 # ── mailbox wizard tests ──────────────────────────────────────────────
 
 
