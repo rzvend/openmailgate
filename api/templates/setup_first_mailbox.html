@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}First Mailbox — SES S3 Mailbox{% endblock %}
+{% block content %}
+
+{% if result %}
+<h1>Mailbox Created</h1>
+
+<div class="card">
+    <table>
+        <tr><td><strong>Mailbox created:</strong></td>
+            <td>{% if result.mailbox_created %}<span class="badge badge-active">yes</span>{% else %}<span class="badge badge-inactive">no</span>{% endif %}</td></tr>
+        <tr><td><strong>IMAP password configured:</strong></td>
+            <td>{% if result.imap_configured %}<span class="badge badge-active">yes</span>{% else %}<span class="badge badge-inactive">no</span>{% endif %}</td></tr>
+        <tr><td><strong>IMAP sync applied:</strong></td>
+            <td>{% if result.sync_applied %}<span class="badge badge-active">yes</span>{% else %}<span class="badge badge-inactive">no</span>{% endif %}</td></tr>
+    </table>
+</div>
+
+{% if result.address %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <h2>Thunderbird Settings</h2>
+    <table>
+        <tr><td><strong>IMAP Server</strong></td><td>10.10.10.16</td></tr>
+        <tr><td><strong>IMAP Port</strong></td><td>143</td></tr>
+        <tr><td><strong>Security</strong></td><td>STARTTLS</td></tr>
+        <tr><td><strong>Username</strong></td><td>{{ result.address }}</td></tr>
+        <tr><td><strong>Password</strong></td><td><em>the password you just defined</em></td></tr>
+        <tr><td colspan="2">&nbsp;</td></tr>
+        <tr><td><strong>SMTP Server</strong></td><td>10.10.10.16</td></tr>
+        <tr><td><strong>SMTP Port</strong></td><td>2525</td></tr>
+        <tr><td><strong>SMTP Security</strong></td><td>None</td></tr>
+    </table>
+</div>
+{% endif %}
+
+{% if result.sync_output %}
+<div class="card" style="margin-top: 16px;">
+    <strong>Sync output:</strong>
+    <pre style="white-space: pre-wrap; font-size: 13px;">{{ result.sync_output }}</pre>
+</div>
+{% endif %}
+
+{% if not result.sync_applied and result.imap_configured %}
+<div class="card" style="margin-top: 16px; background: #fff3cd;">
+    <p>IMAP sync was not applied. Go to <a href="/dashboard/imap-sync">IMAP Sync</a> or run manually.</p>
+</div>
+{% endif %}
+
+<div style="margin-top: 16px;">
+    <a href="/dashboard/mailboxes/{{ result.slug }}">View mailbox</a> &nbsp;
+    <a href="/dashboard/setup">Back to setup</a>
+</div>
+
+{% else %}
+<h1>Create First Mailbox</h1>
+
+<div class="card">
+    <p>Create your first functional mailbox. This reuses the same logic as the mailbox wizard.</p>
+</div>
+
+<form method="post" action="/dashboard/setup/first-mailbox">
+    <div style="margin-bottom: 12px;">
+        <label>Mailbox name:</label><br>
+        <input type="text" name="name" required style="padding: 8px; width: 300px;">
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label>Slug:</label><br>
+        <input type="text" name="slug" required pattern="[a-z0-9_-]+"
+               title="Lowercase letters, numbers, hyphens, underscores"
+               style="padding: 8px; width: 300px;">
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label>Primary email address:</label><br>
+        <input type="email" name="address" required style="padding: 8px; width: 300px;">
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label>IMAP password:</label><br>
+        <input type="password" name="password" required minlength="8" style="padding: 8px; width: 300px;">
+    </div>
+    <div style="margin-bottom: 12px;">
+        <label>Confirm IMAP password:</label><br>
+        <input type="password" name="confirm" required minlength="8" style="padding: 8px; width: 300px;">
+    </div>
+    <div style="margin-bottom: 16px;">
+        <label><input type="checkbox" name="run_sync" value="1" checked> Run IMAP sync now</label>
+    </div>
+    {% if error %}<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>{% endif %}
+    <button type="submit" style="padding: 8px 20px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Create mailbox</button>
+    <a href="/dashboard/setup" class="muted" style="margin-left: 12px;">Cancel</a>
+</form>
+{% endif %}
+{% endblock %}

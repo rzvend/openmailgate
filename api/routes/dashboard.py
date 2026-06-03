@@ -884,6 +884,103 @@ def setup_validate_run(request: Request):
     return request.app.state.templates.TemplateResponse(
         request, "setup_validate.html", {"results": results}
     )
+
+
+# ── setup first mailbox ────────────────────────────────────────────────
+
+
+@router.get("/dashboard/setup/first-mailbox")
+def setup_first_mailbox_form(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_first_mailbox.html", {"result": None, "error": None}
+    )
+
+
+@router.post("/dashboard/setup/first-mailbox")
+def setup_first_mailbox_submit(
+    request: Request,
+    slug: str = Form(""), name: str = Form(""),
+    address: str = Form(""), password: str = Form(""),
+    confirm: str = Form(""), run_sync: bool = Form(False),
+):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    # Validation
+    if not slug or not name or not address or not password:
+        error = "All fields are required."
+    elif not re.match(r"^[a-z0-9_-]+$", slug.strip().lower()):
+        error = "Invalid slug — use lowercase letters, numbers, hyphen, underscore."
+    elif "@" not in address:
+        error = "Invalid email address."
+    elif len(password) < 8:
+        error = "Password must be at least 8 characters."
+    elif password != confirm:
+        error = "Passwords do not match."
+    else:
+        error = None
+
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "setup_first_mailbox.html", {"result": None, "error": error}
+        )
+
+    result = {"mailbox_created": False, "imap_configured": False,
+              "sync_applied": False, "sync_output": ""}
+
+    # Create mailbox
+    try:
+        mb = create_mailbox_with_address(slug.strip().lower(), name.strip(),
+                                         address.strip().lower(), MAILDIR_BASE)
+        result["mailbox_created"] = True
+        result["address"] = address.strip().lower()
+        result["slug"] = mb["slug"]
+    except ValueError as e:
+        return request.app.state.templates.TemplateResponse(
+            request, "setup_first_mailbox.html", {"result": None, "error": str(e)}
+        )
+
+    # Set IMAP password
+    try:
+        hashed = subprocess.run(
+            ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+            input=f"{password}\n{password}",
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip().split("\n")[-1]
+        if hashed.startswith("{"):
+            import sqlite3
+            conn = sqlite3.connect(str(DB_PATH))
+            row = conn.execute(
+                "SELECT id FROM email_addresses WHERE address = ?",
+                (address.strip().lower(),),
+            ).fetchone()
+            if row:
+                update_email_address_imap_password_hash(row[0], hashed)
+                result["imap_configured"] = True
+            conn.close()
+    except Exception:
+        pass
+
+    # Run sync
+    if run_sync:
+        wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
+        try:
+            proc = subprocess.run(
+                ["sudo", str(wrapper)],
+                capture_output=True, text=True, timeout=30, shell=False,
+            )
+            result["sync_output"] = proc.stdout + proc.stderr
+            if proc.returncode == 0:
+                result["sync_applied"] = True
+        except Exception as e:
+            result["sync_output"] = f"Sync failed: {e}"
+
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_first_mailbox.html",
+        {"result": result, "error": None}
+    )
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
     return request.app.state.templates.TemplateResponse(

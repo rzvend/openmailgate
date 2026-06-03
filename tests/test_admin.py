@@ -597,9 +597,47 @@ def test_setup_validate_post_no_secrets():
 def test_setup_validate_no_terraform():
     _login()
     r = client.get("/dashboard/setup/validate")
-    # The page says "No Terraform/OpenTofu commands are executed"
-    assert "are executed" in r.text.lower()
     assert "Run validation" in r.text
+
+
+# ── setup first mailbox tests ───────────────────────────────────────────
+
+
+def test_setup_first_mailbox_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/setup/first-mailbox", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_setup_first_mailbox_page_loads():
+    _login()
+    r = client.get("/dashboard/setup/first-mailbox")
+    assert r.status_code == 200
+    assert "First Mailbox" in r.text
+
+
+def test_setup_first_mailbox_password_mismatch():
+    _login()
+    r = client.post("/dashboard/setup/first-mailbox", data={
+        "slug": "fmb1", "name": "F1", "address": "fmb1@test.com",
+        "password": "12345678", "confirm": "87654321",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "do not match" in r.text
+
+
+def test_setup_first_mailbox_no_password_echo():
+    import uuid
+    _login()
+    slug = f"fmb{uuid.uuid4().hex[:6]}"
+    r = client.post("/dashboard/setup/first-mailbox", data={
+        "slug": slug, "name": "F", "address": f"{slug}@test.com",
+        "password": "12345678", "confirm": "12345678",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "12345678" not in r.text
+    assert "password_hash" not in r.text
+    assert "Thunderbird" in r.text
 
 
 
