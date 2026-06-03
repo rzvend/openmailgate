@@ -1,5 +1,7 @@
 # Operations
 
+See `docs/setup-docker-plan.md` for the Docker deployment and first-run setup plan.
+
 ## Service Status
 
 ```bash
