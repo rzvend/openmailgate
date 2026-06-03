@@ -443,6 +443,52 @@ def test_setup_page_no_secrets():
     # The word "SECRET" may appear as a variable name, that's OK — just not a value
 
 
+# ── setup credentials tests ────────────────────────────────────────────
+
+
+def test_setup_credentials_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/setup/credentials", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_setup_credentials_page_loads():
+    _login()
+    r = client.get("/dashboard/setup/credentials")
+    assert r.status_code == 200
+    assert "Credentials" in r.text
+
+
+def test_setup_credentials_env_shows_status():
+    _login()
+    r = client.post("/dashboard/setup/credentials/check",
+                    data={"source": "env"}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "AWS" in r.text
+    assert "Cloudflare" in r.text
+    assert "No cloud resources were created" in r.text
+    assert "No secrets were stored" in r.text
+
+
+def test_setup_credentials_temporary_no_echo():
+    _login()
+    r = client.post("/dashboard/setup/credentials/check",
+                    data={"source": "temporary", "aws_key": "AKIA_TEST", "aws_secret": "SUPER_SECRET"},
+                    follow_redirects=False)
+    assert r.status_code == 200
+    # Secrets must not appear in response
+    assert "SUPER_SECRET" not in r.text
+    assert "AKIA_TEST" not in r.text
+
+
+def test_setup_credentials_post_shows_no_cloud_created():
+    _login()
+    r = client.post("/dashboard/setup/credentials/check",
+                    data={"source": "env"}, follow_redirects=False)
+    assert "No cloud resources were created" in r.text
+    assert "No secrets were stored" in r.text
+
+
 
 # ── archive mailbox tests ──────────────────────────────────────────────
 

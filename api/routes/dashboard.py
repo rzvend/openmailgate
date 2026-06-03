@@ -616,6 +616,72 @@ def setup_page(request: Request):
     )
 
 
+# ── setup credentials ──────────────────────────────────────────────────
+
+
+@router.get("/dashboard/setup/credentials")
+def setup_credentials_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_credentials.html", {"result": None, "error": None}
+    )
+
+
+@router.post("/dashboard/setup/credentials/check")
+def setup_credentials_check(
+    request: Request,
+    source: str = Form("env"),
+    aws_region: str = Form(""),
+    aws_key: str = Form(""),
+    aws_secret: str = Form(""),
+    cf_token: str = Form(""),
+    cf_zone: str = Form(""),
+):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    result = {"aws": "missing", "cloudflare": "missing", "source": source}
+    error = None
+
+    # Determine credentials source
+    if source == "temporary":
+        region = aws_region.strip()
+        key = aws_key.strip()
+        secret = aws_secret.strip()
+        token = cf_token.strip()
+        zone = cf_zone.strip()
+    else:
+        import os
+        region = os.getenv("AWS_REGION", "")
+        key = os.getenv("AWS_ACCESS_KEY_ID", "")
+        secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+        token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+        zone = os.getenv("CLOUDFLARE_ZONE_ID", "")
+
+    # AWS local check
+    if key and secret and region:
+        result["aws"] = "configured"
+        # Real STS read-only validation
+        try:
+            import boto3
+            sts = boto3.client("sts", region_name=region,
+                               aws_access_key_id=key, aws_secret_access_key=secret)
+            sts.get_caller_identity()
+            result["aws"] = "validated"
+        except Exception:
+            result["aws"] = "error"
+
+    # Cloudflare local check only (real API deferred to F.1d)
+    if token and zone:
+        result["cloudflare"] = "configured"
+
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_credentials.html",
+        {"result": result, "error": error, "source_used": source}
+    )
+
+
 # ── S3 cleanup dry-run ─────────────────────────────────────────────────
 
 
