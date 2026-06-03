@@ -7,8 +7,14 @@
     <strong>Slug:</strong> {{ mailbox.slug }} &nbsp;
     {% if mailbox.is_active %}
         <span class="badge badge-active">active</span>
+        <form method="post" action="/dashboard/mailboxes/{{ mailbox.slug }}/disable" style="display: inline; margin-left: 8px;">
+            <button type="submit" onclick="return confirm('Disable this mailbox?')" style="background: #e74c3c; color: #fff; border: none; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Disable</button>
+        </form>
     {% else %}
         <span class="badge badge-inactive">inactive</span>
+        <form method="post" action="/dashboard/mailboxes/{{ mailbox.slug }}/enable" style="display: inline; margin-left: 8px;">
+            <button type="submit" style="background: #27ae60; color: #fff; border: none; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Enable</button>
+        </form>
     {% endif %}
     &nbsp;
     <strong>Total:</strong> {{ mailbox.total_messages }}
@@ -35,10 +41,19 @@
                     <span class="badge badge-inactive">not configured</span>
                 {% endif %}
             </td>
-            <td>
+            <td style="white-space: nowrap;">
                 <a href="/dashboard/addresses/{{ a.id }}/imap-password">
                     {% if a.has_imap_password %}Change{% else %}Set{% endif %}
                 </a>
+                {% if a.is_active %}
+                    <form method="post" action="/dashboard/addresses/{{ a.id }}/disable" style="display: inline; margin-left: 6px;">
+                        <button type="submit" style="background: none; border: none; color: #e74c3c; cursor: pointer; text-decoration: underline; font-size: 12px;">Disable</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="/dashboard/addresses/{{ a.id }}/enable" style="display: inline; margin-left: 6px;">
+                        <button type="submit" style="background: none; border: none; color: #27ae60; cursor: pointer; text-decoration: underline; font-size: 12px;">Enable</button>
+                    </form>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}

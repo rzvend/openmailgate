@@ -269,3 +269,27 @@ def update_email_address_imap_password_hash(address_id, password_hash):
     )
     conn.commit()
     conn.close()
+
+
+def set_mailbox_active(slug, active):
+    """Set is_active on a mailbox. Returns dict or None."""
+    conn = get_conn()
+    conn.execute("UPDATE mailboxes SET is_active = ? WHERE slug = ?", (int(active), slug))
+    row = conn.execute("SELECT id, slug, name, is_active FROM mailboxes WHERE slug = ?", (slug,)).fetchone()
+    conn.commit()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_email_address_active(address_id, active):
+    """Set is_active on an email address. Returns dict or None."""
+    conn = get_conn()
+    conn.execute("UPDATE email_addresses SET is_active = ? WHERE id = ?", (int(active), address_id))
+    row = conn.execute(
+        "SELECT e.id, e.address, e.mailbox_id, e.is_active, m.slug AS mailbox_slug "
+        "FROM email_addresses e JOIN mailboxes m ON m.id = e.mailbox_id WHERE e.id = ?",
+        (address_id,),
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return dict(row) if row else None

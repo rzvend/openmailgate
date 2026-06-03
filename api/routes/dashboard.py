@@ -29,6 +29,8 @@ from database import (
     get_operator_mailboxes,
     get_operator_name,
     get_operators,
+    set_email_address_active,
+    set_mailbox_active,
     update_email_address_imap_password_hash,
 )
 
@@ -306,6 +308,45 @@ def imap_password_set(request: Request, address_id: int,
 
     slug = addr["mailbox_slug"]
     return RedirectResponse(url=f"/dashboard/mailboxes/{slug}", status_code=302)
+
+
+# ── enable / disable ──────────────────────────────────────────────────
+
+
+@router.post("/dashboard/mailboxes/{slug}/disable")
+def disable_mailbox(request: Request, slug: str):
+    _auth = require_login(request)
+    if _auth: return _auth
+    set_mailbox_active(slug, False)
+    return RedirectResponse(url=f"/dashboard/mailboxes/{slug}", status_code=302)
+
+
+@router.post("/dashboard/mailboxes/{slug}/enable")
+def enable_mailbox(request: Request, slug: str):
+    _auth = require_login(request)
+    if _auth: return _auth
+    set_mailbox_active(slug, True)
+    return RedirectResponse(url=f"/dashboard/mailboxes/{slug}", status_code=302)
+
+
+@router.post("/dashboard/addresses/{address_id}/disable")
+def disable_address(request: Request, address_id: int):
+    _auth = require_login(request)
+    if _auth: return _auth
+    addr = set_email_address_active(address_id, False)
+    if not addr:
+        raise HTTPException(status_code=404, detail="address not found")
+    return RedirectResponse(url=f"/dashboard/mailboxes/{addr['mailbox_slug']}", status_code=302)
+
+
+@router.post("/dashboard/addresses/{address_id}/enable")
+def enable_address(request: Request, address_id: int):
+    _auth = require_login(request)
+    if _auth: return _auth
+    addr = set_email_address_active(address_id, True)
+    if not addr:
+        raise HTTPException(status_code=404, detail="address not found")
+    return RedirectResponse(url=f"/dashboard/mailboxes/{addr['mailbox_slug']}", status_code=302)
 
 
 # ── IMAP sync ──────────────────────────────────────────────────────────

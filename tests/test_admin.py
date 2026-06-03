@@ -255,3 +255,39 @@ def test_mailbox_wizard_does_not_expose_password():
     assert "12345678" not in r.text
     assert "imap_password_hash" not in r.text
 
+
+# ── enable/disable tests ──────────────────────────────────────────────
+
+
+def test_disable_mailbox_requires_login():
+    client.post("/auth/logout")
+    r = client.post("/dashboard/mailboxes/financeiro/disable", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_disable_mailbox_success():
+    _login()
+    r = client.post("/dashboard/mailboxes/financeiro/disable", follow_redirects=False)
+    assert r.status_code == 302
+    r2 = client.get("/dashboard/mailboxes/financeiro")
+    assert "inactive" in r2.text.lower()
+
+
+def test_enable_mailbox_success():
+    _login()
+    client.post("/dashboard/mailboxes/financeiro/enable", follow_redirects=False)
+    r = client.get("/dashboard/mailboxes/financeiro")
+    assert "active" in r.text.lower()
+
+
+def test_disable_address_success():
+    _login()
+    r = client.post("/dashboard/addresses/1/disable", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_enable_address_success():
+    _login()
+    r = client.post("/dashboard/addresses/1/enable", follow_redirects=False)
+    assert r.status_code == 302
+
