@@ -196,3 +196,62 @@ def test_imap_sync_dry_run_hashes_masked():
     # Any SHA512-CRYPT hash that is NOT masked (no ****) is a problem
     unmasked = re.findall(r'\{SHA512-CRYPT\}\$6\$[^:*]{30,}', text)
     assert len(unmasked) == 0, f"Unmasked hashes found: {unmasked[:3]}"
+
+
+# ── mailbox wizard tests ──────────────────────────────────────────────
+
+
+def test_mailbox_wizard_route_not_captured_by_slug():
+    _login()
+    r = client.get("/dashboard/mailboxes/wizard")
+    assert r.status_code == 200
+    assert "Create Mailbox" in r.text
+
+
+def test_mailbox_wizard_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/mailboxes/wizard", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_mailbox_wizard_form_loads():
+    _login()
+    r = client.get("/dashboard/mailboxes/wizard")
+    assert r.status_code == 200
+    assert "Create Mailbox" in r.text
+    assert "IMAP password" in r.text
+
+
+def test_mailbox_wizard_password_mismatch():
+    _login()
+    r = client.post("/dashboard/mailboxes/wizard", data={
+        "slug": "wiz1", "name": "W1", "address": "wiz1@test.com",
+        "password": "12345678", "confirm": "87654321",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "do not match" in r.text
+
+
+def test_mailbox_wizard_success_without_sync():
+    import uuid
+    _login()
+    slug = f"wiz{uuid.uuid4().hex[:6]}"
+    r = client.post("/dashboard/mailboxes/wizard", data={
+        "slug": slug, "name": "W Test", "address": f"{slug}@test.com",
+        "password": "12345678", "confirm": "12345678",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert "Mailbox Created" in r.text or "mailbox_created" in r.text.lower()
+
+
+def test_mailbox_wizard_does_not_expose_password():
+    import uuid
+    _login()
+    slug = f"wiz2{uuid.uuid4().hex[:6]}"
+    r = client.post("/dashboard/mailboxes/wizard", data={
+        "slug": slug, "name": "W2", "address": f"{slug}@test.com",
+        "password": "12345678", "confirm": "12345678",
+    }, follow_redirects=False)
+    assert "12345678" not in r.text
+    assert "imap_password_hash" not in r.text
+

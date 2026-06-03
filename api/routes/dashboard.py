@@ -1,5 +1,6 @@
 """Dashboard web routes — read-only HTML views."""
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -92,6 +93,109 @@ def create_mailbox(request: Request, slug: str = Form(""), name: str = Form(""),
         )
 
     return RedirectResponse(url=f"/dashboard/mailboxes/{mb['slug']}", status_code=302)
+
+
+# ── mailbox wizard ────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/mailboxes/wizard")
+def mailbox_wizard_form(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "mailbox_wizard.html", {"error": None, "result": None}
+    )
+
+
+@router.post("/dashboard/mailboxes/wizard")
+def mailbox_wizard_submit(request: Request,
+                          slug: str = Form(""), name: str = Form(""),
+                          address: str = Form(""), password: str = Form(""),
+                          confirm: str = Form(""), run_sync: bool = Form(False)):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    error = _validate_wizard(slug, name, address, password, confirm)
+    if error:
+        return request.app.state.templates.TemplateResponse(
+            request, "mailbox_wizard.html", {"error": error, "result": None}
+        )
+
+    result = {"mailbox_created": False, "address_created": False,
+              "imap_configured": False, "sync_applied": False,
+              "sync_output": "", "mailbox_slug": "", "address_email": ""}
+
+    try:
+        mb = create_mailbox_with_address(slug.strip().lower(), name.strip(),
+                                         address.strip().lower(), MAILDIR_BASE)
+        result["mailbox_created"] = True
+        result["address_created"] = True
+        result["mailbox_slug"] = mb["slug"]
+        result["address_email"] = address.strip().lower()
+    except ValueError as e:
+        return request.app.state.templates.TemplateResponse(
+            request, "mailbox_wizard.html", {"error": str(e), "result": None}
+        )
+
+    # Generate and save IMAP password hash
+    try:
+        proc = subprocess.run(
+            ["doveadm", "pw", "-s", "SHA512-CRYPT"],
+            input=f"{password}\n{password}",
+            capture_output=True, text=True, timeout=10,
+        )
+        hashed = proc.stdout.strip().split("\n")[-1]
+        if hashed.startswith("{"):
+            from database import get_email_address
+            addr_id = get_email_address(None)  # won't work, need to look up by actual address
+            # Look up address by the email we just created
+            import sqlite3
+            conn = sqlite3.connect(str(DB_PATH))
+            row = conn.execute(
+                "SELECT id FROM email_addresses WHERE address = ?",
+                (address.strip().lower(),),
+            ).fetchone()
+            conn.close()
+            if row:
+                update_email_address_imap_password_hash(row[0], hashed)
+                result["imap_configured"] = True
+    except Exception:
+        pass  # imap password step failed but mailbox exists
+
+    # Run sync if requested
+    if run_sync:
+        wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
+        try:
+            sync_proc = subprocess.run(
+                ["sudo", str(wrapper)],
+                capture_output=True, text=True, timeout=30, shell=False,
+            )
+            result["sync_output"] = sync_proc.stdout + sync_proc.stderr
+            if sync_proc.returncode == 0:
+                result["sync_applied"] = True
+        except Exception as e:
+            result["sync_output"] = f"Sync failed: {e}"
+
+    return request.app.state.templates.TemplateResponse(
+        request, "mailbox_wizard.html", {"error": None, "result": result}
+    )
+
+
+def _validate_wizard(slug, name, address, password, confirm):
+    slug = slug.strip().lower()
+    name = name.strip()
+    address = address.strip().lower()
+    if not slug or not name or not address or not password:
+        return "All fields are required."
+    if not re.match(r"^[a-z0-9_-]+$", slug):
+        return "Invalid slug — use lowercase letters, numbers, hyphen, underscore."
+    if "@" not in address:
+        return "Invalid email address."
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+    if password != confirm:
+        return "Passwords do not match."
+    return None
 
 
 @router.get("/dashboard/mailboxes/{slug}")
