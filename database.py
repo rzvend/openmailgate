@@ -448,3 +448,66 @@ def set_catch_all_mailbox(mailbox_id):
 
 def clear_catch_all_mailbox():
     delete_setting("catch_all_mailbox_id")
+
+
+# ── archive / audit copy mailboxes ─────────────────────────────────────
+
+
+def get_inbound_archive_mailbox():
+    mb_id = get_setting("inbound_archive_mailbox_id")
+    if not mb_id:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, slug, name, maildir_path, is_active FROM mailboxes WHERE id = ? AND is_active = 1",
+        (int(mb_id),),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_inbound_archive_mailbox(mailbox_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, is_active FROM mailboxes WHERE id = ?", (mailbox_id,)
+    ).fetchone()
+    if not row or not row[1]:
+        conn.close()
+        return None
+    set_setting("inbound_archive_mailbox_id", mailbox_id)
+    conn.close()
+    return {"id": row[0], "is_active": row[1]}
+
+
+def clear_inbound_archive_mailbox():
+    delete_setting("inbound_archive_mailbox_id")
+
+
+def get_outbound_archive_mailbox():
+    mb_id = get_setting("outbound_archive_mailbox_id")
+    if not mb_id:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, slug, name, maildir_path, is_active FROM mailboxes WHERE id = ? AND is_active = 1",
+        (int(mb_id),),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_outbound_archive_mailbox(mailbox_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, is_active FROM mailboxes WHERE id = ?", (mailbox_id,)
+    ).fetchone()
+    if not row or not row[1]:
+        conn.close()
+        return None
+    set_setting("outbound_archive_mailbox_id", mailbox_id)
+    conn.close()
+    return {"id": row[0], "is_active": row[1]}
+
+
+def clear_outbound_archive_mailbox():
+    delete_setting("outbound_archive_mailbox_id")

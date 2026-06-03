@@ -338,8 +338,19 @@ def process_s3_object(s3, s3_key, size=None, last_modified=None):
             log("INFO", f"Resolved inbound: master only for recipient {headers.get('recipient')}")
         else:
             destinations.append((target_id, target_slug, "target"))
-            destinations.append((master_id, "master", "master_copy"))
-            log("INFO", f"Resolved inbound: {target_slug} + master for recipient {headers.get('recipient')}")
+            # Use configured inbound archive if set, otherwise fall back to master copy
+            archive_id = master_id
+            archive_slug = "master"
+            archive_role = "master_copy"
+            if conn_r:
+                row = conn_r.execute(
+                    "SELECT m.id, m.slug FROM mailboxes m JOIN settings s ON s.value = CAST(m.id AS TEXT) "
+                    "WHERE s.key = 'inbound_archive_mailbox_id' AND m.is_active = 1"
+                ).fetchone()
+                if row and row[0] != target_id:  # Don't duplicate if same as target
+                    archive_id, archive_slug = row[0], row[1]
+            destinations.append((archive_id, archive_slug, archive_role))
+            log("INFO", f"Resolved inbound: {target_slug} + archive {archive_slug} for recipient {headers.get('recipient')}")
 
         # Deliver to each destination Maildir
         for mb_id, mb_slug, role in destinations:

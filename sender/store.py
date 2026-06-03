@@ -44,6 +44,20 @@ def _resolve_sent_cur(master_id):
     return SENT_CUR
 
 
+def _get_outbound_archive_id():
+    """Return outbound archive mailbox id if configured and active, else None."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        row = conn.execute(
+            "SELECT m.id FROM mailboxes m JOIN settings s ON s.value = CAST(m.id AS TEXT) "
+            "WHERE s.key = 'outbound_archive_mailbox_id' AND m.is_active = 1"
+        ).fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
 OUTBOUND_COLUMNS = [
     "s3_bucket",
     "s3_key",
@@ -103,27 +117,30 @@ def save_outbound(
     raw_path = RAW_OUTBOUND_DIR / filename
     raw_path.write_bytes(raw_bytes)
 
-    # ── Maildir .Sent (fan-out: target + master_copy) ──────────────
-    sent_paths = {}  # mb_id -> Path
+    # ── Maildir .Sent (fan-out: target + archive_copy) ──────────────
+    sent_paths = {}
 
-    # Always include master .Sent
-    master_cur = _resolve_sent_cur(master_id=1)
-    master_cur.mkdir(parents=True, exist_ok=True)
-    sent_paths[1] = master_cur / f"{filename}:2,S"
+    # Always include primary target
+    primary_cur = _resolve_sent_cur(master_id=mailbox_id or 1)
+    primary_cur.mkdir(parents=True, exist_ok=True)
+    mb_key = mailbox_id or 1
+    sent_paths[mb_key] = primary_cur / f"{filename}:2,S"
 
-    # If a specific active mailbox other than master is resolved, add it too
-    if mailbox_id and mailbox_id != 1:
-        specific_cur = _resolve_sent_cur(master_id=mailbox_id)
-        if specific_cur != master_cur:
-            specific_cur.mkdir(parents=True, exist_ok=True)
-            sent_paths[mailbox_id] = specific_cur / f"{filename}:2,S"
+    # Check for outbound archive (if different from primary)
+    if mailbox_id:
+        archive_id = _get_outbound_archive_id()
+        if archive_id and archive_id not in sent_paths:
+            arch_cur = _resolve_sent_cur(master_id=archive_id)
+            if arch_cur != primary_cur:
+                arch_cur.mkdir(parents=True, exist_ok=True)
+                sent_paths[archive_id] = arch_cur / f"{filename}:2,S"
 
     # Physical copies
     for mb_id, path in sent_paths.items():
         shutil.copy2(raw_path, path)
 
-    # Canonical sent_path: use specific mailbox if available, else master
-    sent_path = sent_paths.get(mailbox_id) if (mailbox_id and mailbox_id in sent_paths) else sent_paths[1]
+    # Canonical sent_path: use specific mailbox if available, else first entry
+    sent_path = sent_paths.get(mailbox_id) if (mailbox_id and mailbox_id in sent_paths) else list(sent_paths.values())[0]
 
     # ── SQLite ───────────────────────────────────────────────────────
     recipient = ", ".join(rcpt_tos) if rcpt_tos else mail_from

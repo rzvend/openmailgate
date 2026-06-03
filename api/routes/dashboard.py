@@ -16,11 +16,14 @@ from api.auth import require_login
 from config import DB_PATH, MAILDIR_BASE
 from database import (
     clear_catch_all_mailbox,
+    clear_inbound_archive_mailbox,
+    clear_outbound_archive_mailbox,
     count_active_operators,
     create_mailbox_with_address,
     create_operator,
     get_catch_all_mailbox,
     get_email_address,
+    get_inbound_archive_mailbox,
     get_mailbox_addresses,
     get_mailbox_by_slug,
     get_mailbox_counts,
@@ -34,12 +37,15 @@ from database import (
     get_operator_mailboxes,
     get_operator_name,
     get_operators,
+    get_outbound_archive_mailbox,
     grant_operator_mailbox,
     revoke_operator_mailbox,
     set_catch_all_mailbox,
     set_email_address_active,
+    set_inbound_archive_mailbox,
     set_mailbox_active,
     set_operator_active,
+    set_outbound_archive_mailbox,
     update_email_address_imap_password_hash,
     update_operator_password_hash,
 )
@@ -543,6 +549,63 @@ def catch_all_clear(request: Request):
     if _auth: return _auth
     clear_catch_all_mailbox()
     return RedirectResponse(url="/dashboard/catch-all", status_code=302)
+
+
+# ── archive / audit ────────────────────────────────────────────────────
+
+
+@router.get("/dashboard/archive")
+def archive_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    inbound = get_inbound_archive_mailbox()
+    outbound = get_outbound_archive_mailbox()
+    return request.app.state.templates.TemplateResponse(
+        request, "archive.html",
+        {"inbound": inbound, "outbound": outbound, "mailboxes": get_mailboxes(), "error": None}
+    )
+
+
+@router.post("/dashboard/archive/inbound")
+def archive_set_inbound(request: Request, mailbox_id: int = Form(...)):
+    _auth = require_login(request)
+    if _auth: return _auth
+    if not set_inbound_archive_mailbox(mailbox_id):
+        return request.app.state.templates.TemplateResponse(
+            request, "archive.html",
+            {"inbound": get_inbound_archive_mailbox(), "outbound": get_outbound_archive_mailbox(),
+             "mailboxes": get_mailboxes(), "error": "Invalid or inactive mailbox."}
+        )
+    return RedirectResponse(url="/dashboard/archive", status_code=302)
+
+
+@router.post("/dashboard/archive/inbound/clear")
+def archive_clear_inbound(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    clear_inbound_archive_mailbox()
+    return RedirectResponse(url="/dashboard/archive", status_code=302)
+
+
+@router.post("/dashboard/archive/outbound")
+def archive_set_outbound(request: Request, mailbox_id: int = Form(...)):
+    _auth = require_login(request)
+    if _auth: return _auth
+    if not set_outbound_archive_mailbox(mailbox_id):
+        return request.app.state.templates.TemplateResponse(
+            request, "archive.html",
+            {"inbound": get_inbound_archive_mailbox(), "outbound": get_outbound_archive_mailbox(),
+             "mailboxes": get_mailboxes(), "error": "Invalid or inactive mailbox."}
+        )
+    return RedirectResponse(url="/dashboard/archive", status_code=302)
+
+
+@router.post("/dashboard/archive/outbound/clear")
+def archive_clear_outbound(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    clear_outbound_archive_mailbox()
+    return RedirectResponse(url="/dashboard/archive", status_code=302)
 
 
 # ── system status ──────────────────────────────────────────────────────

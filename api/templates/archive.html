@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Archive — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>Archive Mailboxes</h1>
+
+<div class="card">
+    <p>Archive mailboxes receive copies of messages for auditing and recovery.</p>
+    <p><strong>Inbound archive</strong> receives copies of incoming messages.</p>
+    <p><strong>Outbound archive</strong> receives copies of sent messages.</p>
+    <p class="muted">This is different from catch-all, which handles unknown recipient addresses.</p>
+</div>
+
+<h2>Inbound Archive</h2>
+<div class="card">
+    <strong>Current:</strong>
+    {% if inbound %}
+        {{ inbound.name }} ({{ inbound.slug }})
+        <form method="post" action="/dashboard/archive/inbound/clear" style="display: inline; margin-left: 12px;">
+            <button type="submit" style="background: #e74c3c; color: #fff; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer;">Clear</button>
+        </form>
+    {% else %}
+        <span class="muted">Not configured (using master as fallback)</span>
+    {% endif %}
+    <form method="post" action="/dashboard/archive/inbound" style="margin-top: 8px;">
+        <select name="mailbox_id" required style="padding: 6px;">
+            <option value="">Select mailbox...</option>
+            {% for mb in mailboxes %}{% if mb.is_active %}
+            <option value="{{ mb.id }}">{{ mb.name }} ({{ mb.slug }})</option>
+            {% endif %}{% endfor %}
+        </select>
+        <button type="submit" style="padding: 6px 14px; background: #2c3e50; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-left: 8px;">Save</button>
+    </form>
+</div>
+
+<h2>Outbound Archive</h2>
+<div class="card">
+    <strong>Current:</strong>
+    {% if outbound %}
+        {{ outbound.name }} ({{ outbound.slug }})
+        <form method="post" action="/dashboard/archive/outbound/clear" style="display: inline; margin-left: 12px;">
+            <button type="submit" style="background: #e74c3c; color: #fff; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer;">Clear</button>
+        </form>
+    {% else %}
+        <span class="muted">Not configured (using master as fallback)</span>
+    {% endif %}
+    <form method="post" action="/dashboard/archive/outbound" style="margin-top: 8px;">
+        <select name="mailbox_id" required style="padding: 6px;">
+            <option value="">Select mailbox...</option>
+            {% for mb in mailboxes %}{% if mb.is_active %}
+            <option value="{{ mb.id }}">{{ mb.name }} ({{ mb.slug }})</option>
+            {% endif %}{% endfor %}
+        </select>
+        <button type="submit" style="padding: 6px 14px; background: #2c3e50; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-left: 8px;">Save</button>
+    </form>
+</div>
+
+{% if error %}<p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px; margin-top: 12px;">{{ error }}</p>{% endif %}
+{% endblock %}

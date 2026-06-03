@@ -367,6 +367,55 @@ def test_status_page_no_secrets():
         assert secret not in r.text
 
 
+# ── archive mailbox tests ──────────────────────────────────────────────
+
+
+def test_archive_page_requires_login():
+    client.post("/auth/logout")
+    r = client.get("/dashboard/archive", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_archive_page_loads():
+    _login()
+    r = client.get("/dashboard/archive")
+    assert r.status_code == 200
+    assert "Archive" in r.text
+
+
+def test_set_inbound_archive_success():
+    _login()
+    r = client.post("/dashboard/archive/inbound", data={"mailbox_id": "1"}, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_clear_inbound_archive():
+    _login()
+    client.post("/dashboard/archive/inbound", data={"mailbox_id": "1"})
+    r = client.post("/dashboard/archive/inbound/clear", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_set_outbound_archive_success():
+    _login()
+    r = client.post("/dashboard/archive/outbound", data={"mailbox_id": "1"}, follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_clear_outbound_archive():
+    _login()
+    client.post("/dashboard/archive/outbound", data={"mailbox_id": "1"})
+    r = client.post("/dashboard/archive/outbound/clear", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_reject_inactive_archive_mailbox():
+    _login()
+    r = client.post("/dashboard/archive/inbound", data={"mailbox_id": "2"}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "Invalid" in r.text or "inactive" in r.text.lower()
+
+
 # ── mailbox wizard tests ──────────────────────────────────────────────
 
 
