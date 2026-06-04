@@ -8,6 +8,10 @@ terraform {
       source = "cloudflare/cloudflare"
     }
   }
+
+  backend "local" {
+    path = "/app/state/iac/terraform.tfstate"
+  }
 }
 
 provider "aws" {

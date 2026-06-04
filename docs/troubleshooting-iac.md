@@ -139,6 +139,38 @@ Only apply if the plan shows:
 - 0 resources to destroy
 - No unexpected changes
 
+### 4a. Plan keeps recreating resources after import / state not persistent
+
+**Symptoms:**
+```
+Plan shows all resources as new even after importing them.
+After docker compose rebuild, state appears empty.
+Plan: X to add, 0 to change, 0 to destroy (every time after restart).
+```
+
+**Cause:** OpenTofu state was being written to `/app/terraform/terraform.tfstate`, which lives inside the container image (from `COPY . .` in the Dockerfile). That path is rebuilt on every `docker compose build` and lost on container restart. The persistent volume is at `/app/state/iac`.
+
+**Confirm:**
+```bash
+docker compose exec api sh -lc 'find /app -name "terraform.tfstate*"'
+docker compose exec api sh -lc 'ls -la /app/state/iac/'
+```
+
+The state file should be under `/app/state/iac/`, not under `/app/terraform/`.
+
+**Fix — ensure state is stored in the persistent volume:**
+```bash
+# The alpha default now uses backend "local" with path /app/state/iac/terraform.tfstate.
+# If your state is missing, reinit and reimport:
+docker compose exec api sh -lc 'cd /app/iac && tofu init -reconfigure'
+
+# Reimport any resources that already exist in AWS/Cloudflare:
+docker compose exec api sh -lc 'cd /app/iac && tofu import aws_iam_user.ses_smtp_sender ses-s3-mailbox-smtp-sender'
+docker compose exec api sh -lc 'cd /app/iac && tofu import aws_ses_receipt_rule_set.main ses-s3-mailbox-rules'
+```
+
+Then run plan again. It should now show only the missing resources.
+
 ---
 
 ## 5. Access denied / invalid AWS credentials
