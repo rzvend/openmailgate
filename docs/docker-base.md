@@ -2,7 +2,7 @@
 
 This is the initial Docker Compose setup for `ses-s3-mailbox`. It containerizes the three core Python services: API/dashboard, SQS worker, and SMTP sender.
 
-> Dovecot and Postfix are **not** included as running containers in this version. They are planned for G.2. See `docker/dovecot/` and `docker/postfix/` for planned configuration.
+Dovecot is included as an alpha Docker service. Postfix is not included in the alpha path; outbound SMTP is handled by the built-in Python smtp-sender service.
 
 ## Quick Start
 
@@ -57,9 +57,12 @@ docker compose run --rm api python3 worker/migrate.py
 # Run tests
 docker compose run --rm api python3 -m pytest tests/ -q
 
-# IMAP sync (manual — depends on host Dovecot)
-# Not yet automated inside Docker. Run on host:
-sudo python3 -m worker.mailbox_admin sync-imap-users --apply
+# IMAP sync in Docker alpha
+# Writes users to DOVECOT_USERS_FILE, usually /app/dovecot/users
+docker compose run --rm api python3 -m worker.mailbox_admin sync-imap-users --apply
+
+# Restart Dovecot after sync, if needed
+docker compose restart dovecot
 
 # Stop
 docker compose down
@@ -68,15 +71,17 @@ docker compose down
 docker compose restart api
 ```
 
-## Known Limitations (G.1)
+## Known Limitations / Alpha Notes
 
-- **Dovecot** is not containerized. The host must have Dovecot installed and configured to serve IMAP from the `MAILDIR_ROOT` volume.
-- **Postfix / SMTP local relay** is not containerized. The host runs the SMTP sender directly or uses an external relay.
-- **IMAP user sync** (`sync-imap-users --apply`) still needs to run on the host with sudo to write `/etc/dovecot/users`.
-- **Setup wizard** (`/setup`, first-run) is not yet implemented (planned for F.1).
-- **Terraform/OpenTofu** integration is not yet implemented (planned for F.1).
+- **Dovecot** is now available as an alpha Docker service. It is suitable for local, private-network, tailnet, or VPN testing, but is not yet a hardened public IMAP deployment.
+- **Postfix** is not included in the alpha path. Outbound SMTP is handled by the built-in Python `smtp-sender` service.
+- **IMAP user sync** should use `DOVECOT_USERS_FILE=/app/dovecot/users` in Docker mode. Host/systemd mode can still use `/etc/dovecot/users`.
+- **Setup wizard** is available under `/dashboard/setup`.
+- **Terraform/OpenTofu** init/plan/apply is available from the dashboard with safeguards and explicit confirmation.
+- **SMTP sender** is exposed on `127.0.0.1:2525` by default for alpha safety. Use a tailnet/VPN/private network for remote clients.
 
 ## Next Steps
 
-- F.1: First-run setup wizard, environment validation, Terraform/OpenTofu integration
-- G.2: Dovecot/Postfix containers, refined compose, healthchecks, backup/restore, installer, distribution
+- G.2.4: Clean VM install test and Level 1 almost self-service validation.
+- Public alpha: README, LICENSE, release notes, and final safety checklist.
+- G.3: Optional Postfix / advanced MTA support after alpha.

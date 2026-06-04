@@ -34,11 +34,16 @@ services:
     env_file: .env
     command: python3 -m sender.smtp_server
     ports:
-      - "127.0.0.1:${SMTP_PORT:-2525}:2525"
+      - "${SMTP_BIND:-127.0.0.1}:${SMTP_PORT:-2525}:2525"
     volumes:
       - app_data:/app/data
       - app_logs:/app/logs
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import socket; socket.create_connection((\"127.0.0.1\",2525),timeout=3).close()'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # ── Dovecot / Postfix — planned for G.2.x ───────────────────────────
   #

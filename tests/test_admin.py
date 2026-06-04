@@ -661,6 +661,28 @@ def test_compose_binds_imap_localhost():
     assert "IMAP_BIND:-127.0.0.1" in compose or "127.0.0.1" in compose
 
 
+# ── SMTP sender Docker tests ────────────────────────────────────────────
+
+
+def test_compose_contains_smtp_sender():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    assert "smtp-sender:" in compose
+    assert "sender.smtp_server" in compose
+
+
+def test_compose_smtp_binds_localhost():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    assert "SMTP_BIND:-127.0.0.1" in compose or "127.0.0.1.*2525" in compose
+
+
+def test_compose_no_active_postfix():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    # Postfix should not be an active service (only commented/planned)
+    active_lines = [l for l in compose.split("\n") if not l.strip().startswith("#")]
+    active_text = "\n".join(active_lines)
+    assert "postfix:" not in active_text.lower()
+
+
 
 # ── archive mailbox tests ──────────────────────────────────────────────
 
