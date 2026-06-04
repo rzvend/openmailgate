@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 import worker.dovecot_users as du
 
 from api.auth import require_login
-from config import DB_PATH, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX
+from config import DB_PATH, DOVECOT_USERS_FILE, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX
 from database import (
     clear_catch_all_mailbox,
     clear_inbound_archive_mailbox,
@@ -1254,10 +1254,10 @@ def imap_sync_dry_run(request: Request):
 
     warning = None
     try:
-        existing = du.parse_dovecot_users("/etc/dovecot/users")
+        existing = du.parse_dovecot_users(DOVECOT_USERS_FILE)
     except (PermissionError, FileNotFoundError) as e:
         warning = (
-            "Cannot read /etc/dovecot/users — showing database-backed users only. "
+            f"Cannot read {DOVECOT_USERS_FILE} — showing database-backed users only. "
             "Existing file hashes from Dovecot are not compared."
         )
         existing = {}

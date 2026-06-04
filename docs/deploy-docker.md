@@ -54,6 +54,7 @@ docker compose run --rm api python3 scripts/bootstrap_admin.py
 |---|---|---|
 | API | `127.0.0.1:8000` | Dashboard and JSON API |
 | SMTP sender | `127.0.0.1:2525` | Local SMTP relay for Thunderbird |
+| Dovecot | `127.0.0.1:143` | IMAP (alpha) |
 | Worker SQS | — | Consumes SQS events from S3 |
 
 ## Day-to-day Commands
@@ -81,8 +82,8 @@ docker compose ps                   # status
 
 ## Limitations (alpha)
 
-- **Dovecot runs on the host**, not in Docker. IMAP port 143 must be accessible from the host.
-- **IMAP user sync** (`sync-imap-users --apply`) must run on the host with sudo.
+- **Dovecot** runs in Docker (alpha). IMAP binds to `127.0.0.1:143` by default. No TLS/STARTTLS.
+- **IMAP user sync** uses `DOVECOT_USERS_FILE` path; no sudo needed in Docker mode.
 - **Terraform/OpenTofu** automation is alpha. Review plans before applying.
 - **Postfix/SMTP relay** is not containerized; the host runs `smtp_server.py` directly.
 - **No HTTPS/TLS termination** is provided. Use a reverse proxy (Caddy, Nginx) for production.

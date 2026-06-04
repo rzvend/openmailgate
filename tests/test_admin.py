@@ -640,6 +640,27 @@ def test_setup_first_mailbox_no_password_echo():
     assert "Thunderbird" in r.text
 
 
+# ── Dovecot Docker tests ────────────────────────────────────────────────
+
+
+def test_dovecot_users_file_in_env():
+    import os
+    from config import DOVECOT_USERS_FILE
+    assert DOVECOT_USERS_FILE
+
+
+def test_compose_contains_dovecot():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    assert "dovecot:" in compose
+    assert "image: dovecot" in compose
+
+
+def test_compose_binds_imap_localhost():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+    # Should not expose to 0.0.0.0 by default
+    assert "IMAP_BIND:-127.0.0.1" in compose or "127.0.0.1" in compose
+
+
 
 # ── archive mailbox tests ──────────────────────────────────────────────
 

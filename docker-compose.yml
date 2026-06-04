@@ -45,8 +45,26 @@ services:
   # These services require further configuration and testing before
   # they can be enabled in the default stack. See docs/deploy-docker.md.
 
+  dovecot:
+    image: dovecot/dovecot:2.3.21
+    restart: unless-stopped
+    ports:
+      - "${IMAP_BIND:-127.0.0.1}:${IMAP_PORT:-143}:143"
+    volumes:
+      - app_data:/app/data:ro
+      - ./docker/dovecot/dovecot.conf:/etc/dovecot/dovecot.conf:ro
+      - dovecot_data:/app/dovecot
+    healthcheck:
+      test: ["CMD-SHELL", "dovecot service status 2>/dev/null || doveadm service status imap 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    cap_add:
+      - SYS_PTRACE
+
 volumes:
   app_data:
   app_logs:
   iac_state:
   iac_setup_logs:
+  dovecot_data:
