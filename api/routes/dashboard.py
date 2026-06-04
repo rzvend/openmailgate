@@ -690,6 +690,61 @@ def _run_iac_command(tool, args, workdir, env):
         return -1, f"ERROR: {e}"
 
 
+_IAC_HINT_LINK = "/docs/troubleshooting-iac.md"
+_IAC_ERROR_PATTERNS = [
+    ("tofu: not found", "FileNotFoundError",
+     "OpenTofu missing",
+     "OpenTofu binary not found inside the API container.",
+    ),
+    ("/app/iac", "No such file",
+     "IAC_WORKDIR missing",
+     "IAC_WORKDIR does not exist inside the container.",
+    ),
+    ("registry.opentofu.org", "could not resolve host", "i/o timeout", "context deadline exceeded",
+     "DNS / registry unreachable",
+     "Container DNS cannot reach the OpenTofu registry.",
+    ),
+    ("EntityAlreadyExists", "AlreadyExists",
+     "Resource already exists",
+     "The resource exists in AWS/Cloudflare but is not tracked in the current OpenTofu state.",
+    ),
+    ("AccessDenied", "UnauthorizedOperation",
+     "AWS access denied",
+     "AWS credentials are missing, invalid, expired, or lack required permissions.",
+    ),
+    ("InvalidClientTokenId", "SignatureDoesNotMatch", "NoCredentialProviders",
+     "AWS credential issue",
+     "AWS credentials are invalid or not configured.",
+    ),
+    ("invalid zone identifier",
+     "Cloudflare token / Zone ID",
+     "Check your Cloudflare Zone ID and API token permissions.",
+    ),
+    ("Email address is not verified", "sandbox",
+     "SES sandbox",
+     "The AWS SES account is in sandbox mode. Verify recipient addresses for testing or request production access.",
+    ),
+]
+
+
+def classify_iac_error(log_text: str) -> dict | None:
+    """Classify known IaC error patterns and return a hint dict, or None."""
+    if not log_text:
+        return None
+    lower = log_text.lower()
+    for patterns in _IAC_ERROR_PATTERNS:
+        category = patterns[-2]
+        hint = patterns[-1]
+        keywords = patterns[:-2]
+        if any(k.lower() in lower for k in keywords if isinstance(k, str)):
+            return {
+                "category": category,
+                "hint": hint,
+                "link": _IAC_HINT_LINK,
+            }
+    return None
+
+
 @router.get("/dashboard/setup/iac")
 def setup_iac_page(request: Request):
     _auth = require_login(request)
@@ -718,7 +773,8 @@ def setup_iac_init(request: Request):
     try:
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
         code, output = _run_iac_command(tool, ["init", "-no-color"], workdir, env)
-        return _render_iac(request, tool, workdir, output=output, error=None)
+        hint = classify_iac_error(output) if code != 0 else None
+        return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
     finally:
         _release_iac_lock(lock)
 
@@ -738,7 +794,8 @@ def setup_iac_plan(request: Request):
         plan_file = f"{state_dir}/last.tfplan"
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
         code, output = _run_iac_command(tool, ["plan", "-no-color", "-out", plan_file], workdir, env)
-        return _render_iac(request, tool, workdir, output=output, error=None)
+        hint = classify_iac_error(output) if code != 0 else None
+        return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
     finally:
         _release_iac_lock(lock)
 
@@ -771,18 +828,19 @@ def setup_iac_apply(
     try:
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
         code, output = _run_iac_command(tool, ["apply", plan_file], workdir, env)
-        return _render_iac(request, tool, workdir, output=output, error=None)
+        hint = classify_iac_error(output) if code != 0 else None
+        return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
     finally:
         _release_iac_lock(lock)
 
 
-def _render_iac(request, tool, workdir, output, error):
+def _render_iac(request, tool, workdir, output, error, hint=None):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
     return request.app.state.templates.TemplateResponse(
         request, "setup_iac.html",
         {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
-         "output": output, "error": error}
+         "output": output, "error": error, "hint": hint}
     )
 
 

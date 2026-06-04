@@ -26,6 +26,16 @@
 <p style="color: #721c24; background: #f8d7da; padding: 8px; border-radius: 4px;">{{ error }}</p>
 {% endif %}
 
+{% if hint %}
+<div style="margin-top: 8px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+    <strong>Troubleshooting: {{ hint.category }}</strong>
+    <p style="margin: 4px 0;">{{ hint.hint }}</p>
+    {% if hint.link %}
+    <small><a href="{{ hint.link }}" target="_blank">Open troubleshooting guide →</a></small>
+    {% endif %}
+</div>
+{% endif %}
+
 {% if output %}
 <div class="card" style="margin-top: 16px;">
     <strong>Output (sanitized):</strong>

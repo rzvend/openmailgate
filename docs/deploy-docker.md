@@ -95,4 +95,5 @@ chmod 600 .env
 # Never commit .env, data/, terraform state, or backups.
 # Backup terraform state and database regularly.
 # See docs/backup-restore.md.
+# IaC setup issues? See docs/troubleshooting-iac.md.
 ```
