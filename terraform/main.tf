@@ -16,8 +16,12 @@ provider "aws" {
 
 provider "cloudflare" {}
 
+locals {
+  mail_prefix = element(split(".", var.domain), 0)
+}
+
 resource "aws_s3_bucket" "mail_bucket" {
-  bucket = "ricardo-vc-ses-mailbox"
+  bucket = var.mail_bucket_name
 }
 
 resource "aws_s3_bucket_public_access_block" "mail_bucket_block" {
@@ -29,18 +33,8 @@ resource "aws_s3_bucket_public_access_block" "mail_bucket_block" {
   restrict_public_buckets = true
 }
 
-resource "aws_sns_topic" "mail_topic" {
-  name = "ses-mail-received"
-}
-
 resource "aws_sqs_queue" "mail_queue" {
-  name = "ses-mail-queue"
-}
-
-resource "aws_sns_topic_subscription" "mail_queue_subscription" {
-  topic_arn = aws_sns_topic.mail_topic.arn
-  protocol  = "sqs"
-  endpoint  = aws_sqs_queue.mail_queue.arn
+  name = var.sqs_queue_name
 }
 
 resource "aws_sqs_queue_policy" "mail_queue_policy" {
@@ -51,13 +45,16 @@ resource "aws_sqs_queue_policy" "mail_queue_policy" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Service = "sns.amazonaws.com"
+        Service = "s3.amazonaws.com"
       }
       Action   = "sqs:SendMessage"
       Resource = aws_sqs_queue.mail_queue.arn
       Condition = {
-        ArnEquals = {
-          "aws:SourceArn" = aws_sns_topic.mail_topic.arn
+        ArnLike = {
+          "aws:SourceArn" = aws_s3_bucket.mail_bucket.arn
+        }
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
         }
       }
     }]
@@ -110,14 +107,13 @@ resource "aws_ses_receipt_rule" "store_in_s3" {
   s3_action {
     bucket_name       = aws_s3_bucket.mail_bucket.bucket
     object_key_prefix = "incoming/"
-    topic_arn         = aws_sns_topic.mail_topic.arn
     position          = 1
   }
 }
 
 resource "cloudflare_dns_record" "ses_verification" {
   zone_id = var.cloudflare_zone_id
-  name    = "_amazonses.inbox"
+  name    = "_amazonses.${local.mail_prefix}"
   type    = "TXT"
   content = aws_ses_domain_identity.domain.verification_token
   ttl     = 300
@@ -125,7 +121,7 @@ resource "cloudflare_dns_record" "ses_verification" {
 
 resource "cloudflare_dns_record" "mx_inbox" {
   zone_id  = var.cloudflare_zone_id
-  name     = "inbox"
+  name     = local.mail_prefix
   type     = "MX"
   content  = "inbound-smtp.us-east-1.amazonaws.com"
   priority = 10
@@ -141,9 +137,20 @@ resource "aws_ses_domain_dkim" "domain" {
 resource "cloudflare_dns_record" "ses_dkim" {
   count    = 3
   zone_id  = var.cloudflare_zone_id
-  name     = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}._domainkey.inbox"
+  name     = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}._domainkey.${local.mail_prefix}"
   type     = "CNAME"
   content  = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}.dkim.amazonses.com"
   ttl      = 300
   proxied  = false
+}
+
+# ── S3 Bucket Notification → SQS (direct, no SNS) ─────────────────────────
+resource "aws_s3_bucket_notification" "mail_bucket_notification" {
+  bucket = aws_s3_bucket.mail_bucket.id
+
+  queue {
+    queue_arn     = aws_sqs_queue.mail_queue.arn
+    events        = ["s3:ObjectCreated:*"]
+    filter_prefix = "incoming/"
+  }
 }

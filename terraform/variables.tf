@@ -1,5 +1,13 @@
 variable "domain" {
-  default = "inbox.ricardo.vc"
+  default = "openmailgate.ricardo.vc"
+}
+
+variable "mail_bucket_name" {
+  default = "ses-openmailgate-mailbox"
+}
+
+variable "sqs_queue_name" {
+  default = "ses-openmailgate-incoming"
 }
 
 variable "cloudflare_zone_id" {
