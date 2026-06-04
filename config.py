@@ -29,7 +29,7 @@ def _int_env(name, default):
 
 # ── AWS / S3 ─────────────────────────────────────────────────────────────
 AWS_REGION = _env("AWS_REGION", "us-east-1")
-S3_BUCKET = _env("S3_BUCKET", "ricardo-vc-ses-mailbox")
+S3_BUCKET = _env("S3_BUCKET", "")
 S3_INCOMING_PREFIX = _env("S3_INCOMING_PREFIX", "incoming/")
 S3_PROCESSED_PREFIX = _env("S3_PROCESSED_PREFIX", "processed/")
 S3_FAILED_PREFIX = _env("S3_FAILED_PREFIX", "failed/")
@@ -90,7 +90,7 @@ SES_SMTP_USERNAME = _env("SES_SMTP_USERNAME", "")
 SES_SMTP_PASSWORD = _env("SES_SMTP_PASSWORD", "")
 SES_STARTTLS = _env("SES_SMTP_STARTTLS", "true").lower() == "true"
 
-DEFAULT_FROM_DOMAIN = _env("DEFAULT_FROM_DOMAIN", "inbox.ricardo.vc")
+DEFAULT_FROM_DOMAIN = _env("DEFAULT_FROM_DOMAIN", "")
 
 # ── Dovecot ──────────────────────────────────────────────────────────────
 DOVECOT_USERS_FILE = _env("DOVECOT_USERS_FILE", "/etc/dovecot/users")

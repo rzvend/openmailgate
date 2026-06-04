@@ -846,7 +846,7 @@ def _run_setup_checks():
     # Cloudflare
     if cf_token and cf_zone:
         try:
-            import httpx
+            import httpx2 as httpx
             r = httpx.get(
                 f"https://api.cloudflare.com/client/v4/zones/{cf_zone}",
                 headers={"Authorization": f"Bearer {cf_token}"},

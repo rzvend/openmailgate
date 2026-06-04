@@ -5,3 +5,7 @@ pytest
 fastapi
 uvicorn
 aiofiles
+jinja2
+itsdangerous
+python-multipart
+httpx2

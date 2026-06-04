@@ -5,10 +5,14 @@ Safe to run multiple times — only adds columns that don't exist yet.
 """
 
 import sqlite3
+import os
 import sys
 from pathlib import Path
 
-DB_PATH = Path.home() / "ses-s3-mailbox" / "data" / "mailbox.db"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import DB_PATH as CONFIG_DB_PATH  # noqa: E402
+
+DB_PATH = Path(os.getenv("DB_PATH", str(CONFIG_DB_PATH)))
 
 NEW_COLUMNS = [
     ("cc", "TEXT"),
@@ -161,10 +165,9 @@ def main():
         print("  - imap_password_hash already exists")
 
     # ── seed master mailbox ───────────────────────────────────────────
-    import os
     master_maildir = os.getenv(
         "MASTER_MAILDIR",
-        str(Path.home() / "ses-s3-mailbox" / "data" / "maildir" / "master"),
+        os.getenv("MAILDIR_ROOT", "/app/data/maildir") + "/master",
     )
     row = conn.execute(
         "SELECT id FROM mailboxes WHERE slug = ?", ("master",)
@@ -181,7 +184,7 @@ def main():
         print(f"  + created master mailbox (id={master_id}, path={master_maildir})")
 
     # ── seed default address ──────────────────────────────────────────
-    default_addr = "teste@inbox.ricardo.vc"
+    default_addr = f"admin@{os.getenv('MAIL_DOMAIN', 'example.com')}"
     row = conn.execute(
         "SELECT id FROM email_addresses WHERE address = ?", (default_addr,)
     ).fetchone()

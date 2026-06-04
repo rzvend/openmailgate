@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Install system deps for Dovecot password tools (doveadm pw) used by the app
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     dovecot-core \
     && rm -rf /var/lib/apt/lists/*
 

@@ -15,3 +15,5 @@ data/raw-outbound/
 data/mailbox.db
 backups/
 *.log
+*.eml
+dovecot/users
