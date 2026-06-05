@@ -191,7 +191,10 @@ def ensure_maildir_structure(base_path):
     for sub in (
         "cur", "new", "tmp",
         ".Sent/cur", ".Sent/new", ".Sent/tmp",
+        ".Drafts/cur", ".Drafts/new", ".Drafts/tmp",
         ".Trash/cur", ".Trash/new", ".Trash/tmp",
+        ".Junk/cur", ".Junk/new", ".Junk/tmp",
+        ".Archive/cur", ".Archive/new", ".Archive/tmp",
         ".SentDuplicates/cur", ".SentDuplicates/new", ".SentDuplicates/tmp",
     ):
         (base_path / sub).mkdir(parents=True, exist_ok=True)

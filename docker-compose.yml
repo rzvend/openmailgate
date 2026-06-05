@@ -59,7 +59,7 @@ services:
     ports:
       - "${IMAP_BIND:-127.0.0.1}:${IMAP_PORT:-143}:143"
     volumes:
-      - app_data:/app/data:ro
+      - app_data:/app/data
       - ./docker/dovecot/dovecot.conf:/etc/dovecot/dovecot.conf:ro
       - dovecot_data:/app/dovecot
     healthcheck:
