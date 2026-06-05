@@ -29,7 +29,7 @@ def _int_env(name, default):
 
 # ── AWS / S3 ─────────────────────────────────────────────────────────────
 AWS_REGION = _env("AWS_REGION", "us-east-1")
-S3_BUCKET = _env("S3_BUCKET", "")
+S3_BUCKET = _env("S3_BUCKET") or _env("SES_BUCKET", "")
 S3_INCOMING_PREFIX = _env("S3_INCOMING_PREFIX", "incoming/")
 S3_PROCESSED_PREFIX = _env("S3_PROCESSED_PREFIX", "processed/")
 S3_FAILED_PREFIX = _env("S3_FAILED_PREFIX", "failed/")

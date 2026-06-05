@@ -43,7 +43,7 @@ In Docker these paths map to named volumes or bind mounts.
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=       # required
 AWS_SECRET_ACCESS_KEY=   # required — never commit, never display
-SES_BUCKET=              # required — S3 bucket for SES receiving
+S3_BUCKET=              # required — S3 bucket for SES receiving
 SQS_QUEUE_URL=           # required — SQS queue URL
 S3_INCOMING_PREFIX=incoming/
 S3_PROCESSED_PREFIX=processed/

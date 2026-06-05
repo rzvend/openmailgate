@@ -31,7 +31,7 @@ if [ ! -f .env ]; then
         echo "      IMPORTANT: Edit .env and fill in required values before proceeding:"
         echo "      - AWS_ACCESS_KEY_ID"
         echo "      - AWS_SECRET_ACCESS_KEY"
-        echo "      - SES_BUCKET"
+        echo "      - S3_BUCKET"
         echo "      - SQS_QUEUE_URL"
         echo "      - CLOUDFLARE_API_TOKEN"
         echo "      - CLOUDFLARE_ZONE_ID"
