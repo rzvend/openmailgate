@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}IAM Preflight — SES S3 Mailbox{% endblock %}
+{% block content %}
+<h1>IAM Preflight</h1>
+
+<div class="card">
+    <p>Review the AWS identity and access keys that will be used for OpenTofu infrastructure setup.</p>
+    <p><strong>No keys are created, deleted, or modified. This is a read-only check.</strong></p>
+    <p class="muted">AWS_SECRET_ACCESS_KEY cannot be recovered after key creation. Keep new secrets safe.</p>
+</div>
+
+<form method="post" action="/dashboard/setup/iam-preflight/check" style="margin-top: 16px;">
+    <button type="submit" style="padding: 8px 20px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Check IAM credentials</button>
+    <a href="/dashboard/setup" class="muted" style="margin-left: 12px;">Back to setup</a>
+</form>
+
+{% if error %}
+<div class="card" style="margin-top: 16px; background: #f8d7da;">
+    <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
+{% if result and result.sts_ok %}
+<div class="card" style="margin-top: 16px;">
+    <h3>AWS Identity</h3>
+    <table>
+        <tbody>
+        <tr><td><strong>Account</strong></td><td>{{ result.account }}</td></tr>
+        <tr><td><strong>ARN</strong></td><td><code>{{ result.arn }}</code></td></tr>
+        <tr><td><strong>Type</strong></td><td>{{ result.identity_detail }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if result.access_keys %}
+<div class="card" style="margin-top: 16px;">
+    <h3>Access Keys</h3>
+    <table>
+        <thead><tr><th>Key ID</th><th>Status</th><th>Created</th><th>Age</th></tr></thead>
+        <tbody>
+        {% for k in result.access_keys %}
+        <tr>
+            <td><code>{{ k.key_id }}</code></td>
+            <td>
+                {% if k.status == 'Active' %}
+                <span class="badge badge-active">{{ k.status }}</span>
+                {% else %}
+                <span class="badge badge-inactive">{{ k.status }}</span>
+                {% endif %}
+            </td>
+            <td>{{ k.created }}</td>
+            <td>{{ k.age }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if result.status == 'ready' %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <p><span class="badge badge-active">Ready for OpenTofu plan</span></p>
+    <p>{{ result.status_hint }}</p>
+    <a href="/dashboard/setup/iac" style="display: inline-block; margin-top: 8px; padding: 8px 20px; background: #2c3e50; color: #fff; text-decoration: none; border-radius: 4px;">Continue to OpenTofu plan</a>
+</div>
+{% elif result.status == 'blocked' %}
+<div class="card" style="margin-top: 16px; background: #fff3cd;">
+    <p><span class="badge badge-inactive">Blocked — manual action required</span></p>
+    <p><strong>{{ result.status_hint }}</strong></p>
+    <p>AWS does not allow creating a third access key for the same IAM user.</p>
+    <p>Before deleting any key, confirm whether it is still used by another service.</p>
+
+    <ol style="margin-top: 8px; line-height: 1.8;">
+        <li>Identify which old access key is no longer needed.</li>
+        <li><strong>Deactivate the old key first:</strong>
+            <pre>aws iam update-access-key \
+  --user-name &lt;user&gt; \
+  --access-key-id AKIA... \
+  --status Inactive</pre>
+        </li>
+        <li>Verify that no service breaks by using the deactivated key.</li>
+        <li><strong>Delete the old key only after confirming it is safe:</strong>
+            <pre>aws iam delete-access-key \
+  --user-name &lt;user&gt; \
+  --access-key-id AKIA...</pre>
+        </li>
+        <li>Return to this page and run <em>Check IAM credentials</em> again.</li>
+    </ol>
+
+    <p class="muted" style="margin-top: 8px;">
+        Deleting an access key immediately may break services that still rely on it.
+        Always deactivate first and confirm before deleting.
+    </p>
+</div>
+{% elif result.status == 'manual_required' %}
+<div class="card" style="margin-top: 16px; background: #fff3cd;">
+    <p><span class="badge badge-inactive">Manual setup required</span></p>
+    <p>{{ result.status_hint }}</p>
+    <p>You can still proceed to OpenTofu plan if access keys are managed manually.</p>
+    <a href="/dashboard/setup/iac" style="display: inline-block; margin-top: 8px; padding: 8px 20px; background: #2c3e50; color: #fff; text-decoration: none; border-radius: 4px;">Continue manually</a>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

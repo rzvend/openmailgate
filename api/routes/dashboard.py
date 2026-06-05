@@ -1184,6 +1184,145 @@ def setup_credentials_check(
     )
 
 
+# ── IAM credentials preflight ────────────────────────────────────────────
+
+
+_IAM_ARN_RE = _re.compile(r"^arn:aws:iam::(\d+):user/(.+)$")
+
+
+def _compute_age(created):
+    """Return a human-readable age string from a datetime or isoformat string."""
+    if created is None:
+        return "unknown"
+    from datetime import datetime, timezone
+    if isinstance(created, str):
+        created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+    delta = datetime.now(timezone.utc) - created
+    days = delta.days
+    if days < 1:
+        return "today"
+    if days < 30:
+        return f"{days} day(s)"
+    if days < 365:
+        return f"{days // 30} month(s)"
+    return f"{days // 365} year(s)"
+
+
+@router.get("/dashboard/setup/iam-preflight")
+def setup_iam_preflight_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_iam_preflight.html", {"result": None, "error": None}
+    )
+
+
+@router.post("/dashboard/setup/iam-preflight/check")
+def setup_iam_preflight_check(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    import os
+
+    region = os.getenv("AWS_REGION", "")
+    key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+
+    result = {
+        "sts_ok": False,
+        "account": "",
+        "arn": "",
+        "identity_type": "unknown",
+        "identity_detail": "",
+        "access_keys": [],
+        "key_count": 0,
+        "status": "error",
+    }
+    error = None
+
+    if not key or not secret:
+        error = "AWS credentials not configured. CheckCredentials first."
+        return request.app.state.templates.TemplateResponse(
+            request, "setup_iam_preflight.html", {"result": result, "error": error}
+        )
+
+    # STS — get identity
+    try:
+        import boto3
+        sts = boto3.client("sts", region_name=region or "us-east-1",
+                           aws_access_key_id=key, aws_secret_access_key=secret)
+        identity = sts.get_caller_identity()
+        result["sts_ok"] = True
+        result["account"] = _mask_account_id(identity.get("Account", ""))
+        result["arn"] = identity.get("Arn", "")
+    except Exception as exc:
+        error = f"STS failed: {exc}"
+        return request.app.state.templates.TemplateResponse(
+            request, "setup_iam_preflight.html", {"result": result, "error": error}
+        )
+
+    # Detect identity type
+    arn = result["arn"]
+    if ":root" in arn:
+        result["identity_type"] = "root"
+        result["identity_detail"] = "Root account — access keys must be managed manually."
+        result["status"] = "manual_required"
+    elif _IAM_ARN_RE.match(arn):
+        result["identity_type"] = "iam_user"
+        username = _IAM_ARN_RE.match(arn).group(2)
+        result["identity_detail"] = f"IAM user: {username}"
+
+        # List access keys
+        try:
+            iam = boto3.client("iam", region_name="us-east-1",
+                               aws_access_key_id=key, aws_secret_access_key=secret)
+            keys_resp = iam.list_access_keys(UserName=username)
+            keys = []
+            for ak in keys_resp.get("AccessKeyMetadata", []):
+                keys.append({
+                    "key_id": mask_secret(ak.get("AccessKeyId", "")),
+                    "status": ak.get("Status", "unknown"),
+                    "created": str(ak.get("CreateDate", ""))[:10],
+                    "age": _compute_age(ak.get("CreateDate")),
+                })
+            result["access_keys"] = keys
+            result["key_count"] = len(keys)
+
+            if result["key_count"] >= 2:
+                result["status"] = "blocked"
+                result["status_hint"] = (
+                    "Maximum of 2 access keys reached. "
+                    "Delete or deactivate an existing key before creating a new one."
+                )
+            else:
+                result["status"] = "ready"
+                result["status_hint"] = "Ready to continue to OpenTofu plan."
+
+        except Exception as exc:
+            msg = str(exc)
+            if "AccessDenied" in msg:
+                result["status"] = "manual_required"
+                result["status_hint"] = (
+                    "IAM permission denied. Ensure the credentials have "
+                    "iam:ListAccessKeys permission, or manage keys manually."
+                )
+            else:
+                result["status"] = "manual_required"
+                result["status_hint"] = f"Could not list access keys: {msg}"
+    elif ":assumed-role" in arn or ":federated-user" in arn:
+        result["identity_type"] = "federated"
+        result["identity_detail"] = "Federated/assumed role — access keys are managed by the identity provider."
+        result["status"] = "manual_required"
+    else:
+        result["identity_type"] = "unknown"
+        result["identity_detail"] = "ARN format not recognized."
+        result["status"] = "manual_required"
+
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_iam_preflight.html", {"result": result, "error": error}
+    )
+
+
 # ── S3 cleanup dry-run ─────────────────────────────────────────────────
 
 
