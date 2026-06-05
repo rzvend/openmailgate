@@ -14,7 +14,19 @@
 </form>
 
 {% if results %}
-<table>
+{% set ok = results | selectattr('status', 'equalto', 'ok') | list | length %}
+{% set warn = results | selectattr('status', 'equalto', 'warning') | list | length %}
+{% set err = results | selectattr('status', 'equalto', 'error') | list | length %}
+{% set skip = results | selectattr('status', 'equalto', 'skipped') | list | length %}
+<div class="card" style="margin-top: 16px;">
+    <strong>Summary:</strong>
+    <span style="color: #27ae60;">OK: {{ ok }}</span> &nbsp;
+    <span style="color: #f39c12;">Warning: {{ warn }}</span> &nbsp;
+    <span style="color: #e74c3c;">Error: {{ err }}</span> &nbsp;
+    <span style="color: #95a5a6;">Skipped: {{ skip }}</span>
+</div>
+
+<table style="margin-top: 16px;">
     <thead><tr><th>Group</th><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
     <tbody>
     {% for r in results %}

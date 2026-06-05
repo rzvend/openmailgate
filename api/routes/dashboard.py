@@ -879,6 +879,7 @@ def _parse_plan_summary(output: str) -> dict | None:
 
 def _run_setup_checks():
     """Run read-only validation checks against AWS/Cloudflare. Returns list of dicts."""
+    import json
     results = []
     region = _os.getenv("AWS_REGION", "")
     bucket = _os.getenv("S3_BUCKET", "")
@@ -886,8 +887,32 @@ def _run_setup_checks():
     cf_token = _os.getenv("CLOUDFLARE_API_TOKEN", "")
     cf_zone = _os.getenv("CLOUDFLARE_ZONE_ID", "")
     mail_domain = _os.getenv("DEFAULT_FROM_DOMAIN", "")
+    queue_arn = None
 
-    # AWS STS
+    # ── Load OpenTofu outputs ──────────────────────────────────────────
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    tofu_outputs = {}
+    try:
+        result = _sp.run(
+            ["tofu", "output", "-json", "-no-color"],
+            capture_output=True, text=True, timeout=30,
+            cwd=workdir, shell=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            tofu_outputs = json.loads(result.stdout)
+            results.append({"group": "OpenTofu", "name": "Outputs", "status": "ok", "detail": "Outputs loaded"})
+        else:
+            results.append({"group": "OpenTofu", "name": "Outputs", "status": "skipped", "detail": "No outputs — run apply first"})
+    except Exception:
+        results.append({"group": "OpenTofu", "name": "Outputs", "status": "skipped", "detail": "tofu output command failed"})
+
+    # Use tofu outputs as primary source, fallback to .env
+    if tofu_outputs:
+        bucket = tofu_outputs.get("mail_bucket", {}).get("value", bucket) or bucket
+        queue_url = tofu_outputs.get("sqs_queue_url", {}).get("value", queue_url) or queue_url
+        mail_domain = tofu_outputs.get("test_email_domain", {}).get("value", mail_domain) or mail_domain
+
+    # ── AWS STS ────────────────────────────────────────────────────────
     try:
         import boto3
         sts = boto3.client("sts", region_name=region or "us-east-1")
@@ -897,7 +922,7 @@ def _run_setup_checks():
         msg = str(e).split(":")[-1].strip()
         results.append({"group": "AWS", "name": "STS caller identity", "status": "error", "detail": msg})
 
-    # S3
+    # ── S3 Bucket ──────────────────────────────────────────────────────
     if bucket:
         try:
             s3 = boto3.client("s3", region_name=region or "us-east-1")
@@ -909,11 +934,12 @@ def _run_setup_checks():
     else:
         results.append({"group": "S3", "name": "Bucket", "status": "skipped", "detail": "S3_BUCKET not configured"})
 
-    # SQS
+    # ── SQS Queue ──────────────────────────────────────────────────────
     if queue_url:
         try:
             sqs = boto3.client("sqs", region_name=region or "us-east-1")
-            sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])
+            attrs = sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])
+            queue_arn = attrs.get("Attributes", {}).get("QueueArn", "")
             results.append({"group": "SQS", "name": "Queue", "status": "ok", "detail": "Queue accessible"})
         except Exception as e:
             msg = str(e).split(":")[-1].strip()
@@ -921,7 +947,28 @@ def _run_setup_checks():
     else:
         results.append({"group": "SQS", "name": "Queue", "status": "skipped", "detail": "SQS_QUEUE_URL not configured"})
 
-    # SES
+    # ── S3 → SQS Notification ──────────────────────────────────────────
+    if bucket:
+        try:
+            s3 = boto3.client("s3", region_name=region or "us-east-1")
+            notif = s3.get_bucket_notification_configuration(Bucket=bucket)
+            q_configs = notif.get("QueueConfigurations", [])
+            if q_configs:
+                if queue_arn and any(q.get("QueueArn") == queue_arn for q in q_configs):
+                    results.append({"group": "S3", "name": "→ SQS notification", "status": "ok", "detail": "S3 events → SQS configured"})
+                else:
+                    has_correct = any(
+                        "s3:ObjectCreated" in str(q.get("Events", [])) for q in q_configs
+                    )
+                    results.append({"group": "S3", "name": "→ SQS notification", "status": "warning" if has_correct else "ok",
+                                    "detail": "Notification exists (ARN match not verified)"})
+            else:
+                results.append({"group": "S3", "name": "→ SQS notification", "status": "error", "detail": "No S3 → SQS notification configured"})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "S3", "name": "→ SQS notification", "status": "error", "detail": msg})
+
+    # ── SES Identity ───────────────────────────────────────────────────
     if mail_domain:
         try:
             ses = boto3.client("ses", region_name=region or "us-east-1")
@@ -934,7 +981,46 @@ def _run_setup_checks():
     else:
         results.append({"group": "SES", "name": "Domain identity", "status": "skipped", "detail": "Domain not configured"})
 
-    # Cloudflare
+    # ── SES DKIM ───────────────────────────────────────────────────────
+    if mail_domain:
+        try:
+            ses = boto3.client("ses", region_name=region or "us-east-1")
+            dkim = ses.get_identity_dkim_attributes(Identities=[mail_domain])
+            dkim_attrs = dkim.get("DkimAttributes", {}).get(mail_domain, {})
+            dkim_status = dkim_attrs.get("DkimVerificationStatus", "unknown")
+            dkim_tokens = dkim_attrs.get("DkimTokens", [])
+            results.append({"group": "SES", "name": "DKIM", "status": "ok" if dkim_status == "Success" else "warning",
+                            "detail": f"{dkim_status}" + (f" ({len(dkim_tokens)} tokens)" if dkim_tokens else "")})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "SES", "name": "DKIM", "status": "error", "detail": msg})
+
+    # ── SES Receipt Rule Set ───────────────────────────────────────────
+    try:
+        ses = boto3.client("ses", region_name=region or "us-east-1")
+        rule_set = ses.describe_active_receipt_rule_set()
+        rs_name = rule_set.get("Metadata", {}).get("Name", "")
+        rules = rule_set.get("Rules", [])
+        if rs_name:
+            results.append({"group": "SES", "name": "Receipt rule set", "status": "ok", "detail": f"{rs_name} ({len(rules)} rules)"})
+            # Check if the domain is in recipients
+            if rules and mail_domain:
+                s3_rules = [r for r in rules
+                            if r.get("Enabled") and any(a.get("S3Action") for a in r.get("Actions", []))]
+                has_matching = any(
+                    mail_domain in str(r.get("Recipients", [])) for r in s3_rules
+                )
+                results.append({"group": "SES", "name": "Receipt rule", "status": "ok" if s3_rules else "warning",
+                                "detail": f"{len(s3_rules)} S3 rule(s) active" + (" (domain match)" if has_matching else "")})
+            else:
+                results.append({"group": "SES", "name": "Receipt rule", "status": "skipped", "detail": "No rules or domain not configured"})
+        else:
+            results.append({"group": "SES", "name": "Receipt rule set", "status": "error", "detail": "No active receipt rule set"})
+    except Exception as e:
+        msg = str(e).split(":")[-1].strip()
+        results.append({"group": "SES", "name": "Receipt rule set", "status": "skipped", "detail": msg})
+
+    # ── Cloudflare Zone ────────────────────────────────────────────────
     if cf_token and cf_zone:
         try:
             import httpx2 as httpx
@@ -952,8 +1038,31 @@ def _run_setup_checks():
     else:
         results.append({"group": "Cloudflare", "name": "Zone", "status": "skipped", "detail": "Token or zone ID missing"})
 
-    # DNS — deferred (no dnspython dependency)
-    results.append({"group": "DNS", "name": "MX/TXT records", "status": "skipped", "detail": "Advanced DNS validation deferred"})
+    # ── Cloudflare DNS Records ─────────────────────────────────────────
+    if cf_token and cf_zone and mail_domain:
+        try:
+            import httpx2 as httpx
+            r = httpx.get(
+                f"https://api.cloudflare.com/client/v4/zones/{cf_zone}/dns_records?per_page=100",
+                headers={"Authorization": f"Bearer {cf_token}"},
+                timeout=10,
+            )
+            if r.status_code == 200 and r.json().get("success"):
+                records = r.json().get("result", [])
+                records_by_type = {}
+                for rec in records:
+                    records_by_type.setdefault(rec["type"], []).append(rec)
+                found_mx = any("inbound-smtp" in rec.get("content", "") for rec in records_by_type.get("MX", []))
+                found_txt = len(records_by_type.get("TXT", []))
+                found_cname = len(records_by_type.get("CNAME", []))
+                detail = f"MX:{'yes' if found_mx else 'no'}, TXT:{found_txt}, CNAME:{found_cname}"
+                results.append({"group": "Cloudflare", "name": "DNS records", "status": "ok" if found_mx else "warning", "detail": detail})
+            else:
+                results.append({"group": "Cloudflare", "name": "DNS records", "status": "error", "detail": f"HTTP {r.status_code}"})
+        except Exception as e:
+            results.append({"group": "Cloudflare", "name": "DNS records", "status": "skipped", "detail": str(e).split(":")[-1].strip()})
+    else:
+        results.append({"group": "Cloudflare", "name": "DNS records", "status": "skipped", "detail": "DNS validation requires Cloudflare token, zone ID, and domain"})
 
     return results
 
