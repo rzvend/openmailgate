@@ -624,8 +624,20 @@ def setup_page(request: Request):
 def setup_credentials_page(request: Request):
     _auth = require_login(request)
     if _auth: return _auth
+    import os
+    key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    zone = os.getenv("CLOUDFLARE_ZONE_ID", "")
     return request.app.state.templates.TemplateResponse(
-        request, "setup_credentials.html", {"result": None, "error": None}
+        request, "setup_credentials.html", {
+            "result": None, "error": None,
+            "mail_domain": os.getenv("MAIL_DOMAIN", ""),
+            "aws_region": os.getenv("AWS_REGION", ""),
+            "aws_key_masked": mask_secret(key),
+            "aws_secret_configured": bool(os.getenv("AWS_SECRET_ACCESS_KEY")),
+            "zone_id_masked": mask_secret(zone),
+            "cf_token_configured": bool(token),
+        }
     )
 
 import re as _re
@@ -1054,6 +1066,22 @@ def setup_first_mailbox_submit(
     )
 
 
+def mask_secret(value, visible_start=4, visible_end=4):
+    """Return a partially masked string for display. Secrets return 'configured'."""
+    if not value:
+        return ""
+    if len(value) <= visible_start + visible_end:
+        return "********"
+    return value[:visible_start] + "********" + value[-visible_end:]
+
+
+def _mask_account_id(account_id):
+    """Mask AWS account ID for display (show last 4 digits)."""
+    if not account_id:
+        return ""
+    return "********" + account_id[-4:]
+
+
 @router.post("/dashboard/setup/credentials/check")
 def setup_credentials_check(
     request: Request,
@@ -1067,7 +1095,14 @@ def setup_credentials_check(
     _auth = require_login(request)
     if _auth: return _auth
 
+    import os
+
     result = {"aws": "missing", "cloudflare": "missing", "source": source}
+    aws_account = ""
+    aws_arn = ""
+    zone_name = ""
+    zone_status = ""
+    cf_detail = ""
     error = None
 
     # Determine credentials source
@@ -1078,33 +1113,74 @@ def setup_credentials_check(
         token = cf_token.strip()
         zone = cf_zone.strip()
     else:
-        import os
         region = os.getenv("AWS_REGION", "")
         key = os.getenv("AWS_ACCESS_KEY_ID", "")
         secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
         token = os.getenv("CLOUDFLARE_API_TOKEN", "")
         zone = os.getenv("CLOUDFLARE_ZONE_ID", "")
 
-    # AWS local check
+    mail_domain = os.getenv("MAIL_DOMAIN", "")
+
+    # AWS STS validation
     if key and secret and region:
         result["aws"] = "configured"
-        # Real STS read-only validation
         try:
             import boto3
             sts = boto3.client("sts", region_name=region,
                                aws_access_key_id=key, aws_secret_access_key=secret)
-            sts.get_caller_identity()
+            identity = sts.get_caller_identity()
             result["aws"] = "validated"
-        except Exception:
+            aws_account = identity.get("Account", "")
+            aws_arn = identity.get("Arn", "")
+        except Exception as exc:
             result["aws"] = "error"
+            result["aws_detail"] = str(exc)
 
-    # Cloudflare local check only (real API deferred to F.1d)
+    # Cloudflare real API validation
     if token and zone:
         result["cloudflare"] = "configured"
+        try:
+            import httpx2 as httpx
+            r = httpx.get(
+                f"https://api.cloudflare.com/client/v4/zones/{zone}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            if r.status_code == 200 and r.json().get("success"):
+                result["cloudflare"] = "validated"
+                zone_name = r.json()["result"]["name"]
+                zone_status = r.json()["result"]["status"]
+            elif r.status_code == 403:
+                result["cloudflare"] = "error"
+                cf_detail = "Token invalid or lacks zone permissions"
+            elif r.status_code == 404:
+                result["cloudflare"] = "error"
+                cf_detail = "Zone ID not found or token has no access to it"
+            else:
+                result["cloudflare"] = "error"
+                cf_detail = f"HTTP {r.status_code}"
+        except Exception as exc:
+            result["cloudflare"] = "error"
+            cf_detail = str(exc)
+
+    # "Ready for IAM preflight" requires all validations to pass
+    ready = (
+        bool(mail_domain)
+        and bool(region)
+        and result.get("aws") == "validated"
+        and result.get("cloudflare") == "validated"
+    )
 
     return request.app.state.templates.TemplateResponse(
-        request, "setup_credentials.html",
-        {"result": result, "error": error, "source_used": source}
+        request, "setup_credentials.html", {
+            "result": result, "error": error, "source_used": source,
+            "mail_domain": mail_domain, "aws_region": region,
+            "aws_key_masked": mask_secret(key), "aws_secret_configured": bool(secret),
+            "zone_id_masked": mask_secret(zone), "cf_token_configured": bool(token),
+            "aws_account": _mask_account_id(aws_account), "aws_arn": aws_arn,
+            "zone_name": zone_name, "zone_status": zone_status,
+            "cf_detail": cf_detail, "ready": ready,
+        }
     )
 
 
