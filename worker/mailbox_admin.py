@@ -603,7 +603,7 @@ def main():
     p_sync.add_argument("--apply", action="store_true")
     p_sync.add_argument("--uid", type=int, default=1000)
     p_sync.add_argument("--gid", type=int, default=1000)
-    p_sync.add_argument("--home", default="/home/ricardo")
+    p_sync.add_argument("--home", default="/app")
 
     # operators
     p_co = sub.add_parser("create-operator", help="Create a dashboard operator")

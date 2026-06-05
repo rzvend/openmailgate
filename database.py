@@ -5,6 +5,7 @@ calling ``sqlite3.connect(DB_PATH)`` directly.
 """
 
 import re
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -186,9 +187,13 @@ def get_operator_name(operator_id):
 # ── write helpers (admin) ────────────────────────────────────────────────
 
 
+_DOVECOT_UID = int(os.getenv("DOVECOT_UID", "1000"))
+_DOVECOT_GID = int(os.getenv("DOVECOT_GID", "1000"))
+
+
 def ensure_maildir_structure(base_path):
     """Create Maildir directory tree under base_path."""
-    for sub in (
+    dirs = (
         "cur", "new", "tmp",
         ".Sent/cur", ".Sent/new", ".Sent/tmp",
         ".Drafts/cur", ".Drafts/new", ".Drafts/tmp",
@@ -196,9 +201,14 @@ def ensure_maildir_structure(base_path):
         ".Junk/cur", ".Junk/new", ".Junk/tmp",
         ".Archive/cur", ".Archive/new", ".Archive/tmp",
         ".SentDuplicates/cur", ".SentDuplicates/new", ".SentDuplicates/tmp",
-    ):
-        (base_path / sub).mkdir(parents=True, exist_ok=True)
-    (base_path / "maildirfolder").write_text("")
+    )
+    for sub in dirs:
+        p = (base_path / sub)
+        p.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chown(p, _DOVECOT_UID, _DOVECOT_GID)
+        except OSError:
+            pass
 
 
 def create_mailbox_with_address(slug, name, address, maildir_parent):
