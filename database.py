@@ -210,6 +210,17 @@ def ensure_maildir_structure(base_path):
         except OSError:
             pass
 
+    # Maildir++ folder markers — one per subfolder, plus root
+    folders = ("", ".Sent", ".Drafts", ".Trash", ".Junk", ".Archive", ".SentDuplicates")
+    for folder in folders:
+        mf = base_path / folder / "maildirfolder"
+        if not mf.exists():
+            mf.write_text("")
+        try:
+            os.chown(mf, _DOVECOT_UID, _DOVECOT_GID)
+        except OSError:
+            pass
+
 
 def create_mailbox_with_address(slug, name, address, maildir_parent):
     """Create a mailbox + primary address in a single transaction.
