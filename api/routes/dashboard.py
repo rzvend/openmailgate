@@ -841,7 +841,7 @@ def setup_iac_apply(
                            error="Another IAC job is already running.")
     try:
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
-        code, output = _run_iac_command(tool, ["apply", plan_file], workdir, env)
+        code, output = _run_iac_command(tool, ["apply", "-input=false", "-no-color", plan_file], workdir, env, timeout=600)
         hint = classify_iac_error(output) if code != 0 else None
         return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
     finally:
