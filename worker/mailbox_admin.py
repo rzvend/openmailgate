@@ -596,7 +596,8 @@ def main():
 
     # sync-imap-users
     p_sync = sub.add_parser("sync-imap-users", help="Sync Dovecot passwd-file from database")
-    p_sync.add_argument("--users-file", default="/etc/dovecot/users")
+    import os
+    p_sync.add_argument("--users-file", default=os.getenv("DOVECOT_USERS_FILE", "/etc/dovecot/users"))
     p_sync.add_argument("--output", default=None)
     p_sync.add_argument("--dry-run", action="store_true")
     p_sync.add_argument("--apply", action="store_true")

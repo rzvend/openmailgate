@@ -19,16 +19,32 @@
 {% if result.address %}
 <div class="card" style="margin-top: 16px; background: #d4edda;">
     <h2>Thunderbird Settings</h2>
+
+    {% set imap_srv = imap_bind or '127.0.0.1' %}
+    {% set smtp_srv = smtp_bind or '127.0.0.1' %}
+    {% set imap_p = imap_port or '143' %}
+    {% set smtp_p = smtp_port or '2525' %}
+    {% set is_local = imap_srv == '127.0.0.1' or imap_srv == '::1' %}
+
+    {% if is_local %}
+    <div style="padding: 8px; margin-bottom: 12px; background: #fff3cd; border-radius: 4px;">
+        <strong>Alpha: IMAP/SMTP are bound to 127.0.0.1 (localhost only).</strong>
+        <p>For remote access, use an SSH tunnel:</p>
+        <pre>ssh -L 1143:127.0.0.1:143 -L 12525:127.0.0.1:2525 user@vm</pre>
+        <p>Then configure Thunderbird to connect through the tunnel:</p>
+    </div>
+    {% endif %}
+
     <table>
-        <tr><td><strong>IMAP Server</strong></td><td>10.10.10.16</td></tr>
-        <tr><td><strong>IMAP Port</strong></td><td>143</td></tr>
-        <tr><td><strong>Security</strong></td><td>STARTTLS</td></tr>
+        <tr><td><strong>IMAP Server</strong></td><td>{% if is_local %}127.0.0.1{% else %}{{ imap_srv }}{% endif %}</td></tr>
+        <tr><td><strong>IMAP Port</strong></td><td>{% if is_local %}1143{% else %}{{ imap_p }}{% endif %}</td></tr>
+        <tr><td><strong>Security</strong></td><td>None (alpha{% if is_local %}, local tunnel{% endif %})</td></tr>
         <tr><td><strong>Username</strong></td><td>{{ result.address }}</td></tr>
         <tr><td><strong>Password</strong></td><td><em>the password you just defined</em></td></tr>
         <tr><td colspan="2">&nbsp;</td></tr>
-        <tr><td><strong>SMTP Server</strong></td><td>10.10.10.16</td></tr>
-        <tr><td><strong>SMTP Port</strong></td><td>2525</td></tr>
-        <tr><td><strong>SMTP Security</strong></td><td>None</td></tr>
+        <tr><td><strong>SMTP Server</strong></td><td>{% if is_local %}127.0.0.1{% else %}{{ smtp_srv }}{% endif %}</td></tr>
+        <tr><td><strong>SMTP Port</strong></td><td>{% if is_local %}12525{% else %}{{ smtp_p }}{% endif %}</td></tr>
+        <tr><td><strong>SMTP Security</strong></td><td>None (alpha{% if is_local %}, local tunnel{% endif %})</td></tr>
     </table>
 </div>
 {% endif %}
@@ -37,6 +53,13 @@
 <div class="card" style="margin-top: 16px;">
     <strong>Sync output:</strong>
     <pre style="white-space: pre-wrap; font-size: 13px;">{{ result.sync_output }}</pre>
+</div>
+{% endif %}
+
+{% if result.sync_applied %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <p><strong>Sync applied.</strong> Restart Dovecot to pick up the changes:</p>
+    <pre>docker compose restart dovecot</pre>
 </div>
 {% endif %}
 

@@ -22,12 +22,27 @@
     {% if result.address_email %}
     <div class="card" style="margin-top: 16px;">
         <h2>IMAP Settings</h2>
+
+        {% set imap_srv = imap_bind or '127.0.0.1' %}
+        {% set smtp_srv = smtp_bind or '127.0.0.1' %}
+        {% set imap_p = imap_port or '143' %}
+        {% set smtp_p = smtp_port or '2525' %}
+        {% set is_local = imap_srv == '127.0.0.1' or imap_srv == '::1' %}
+
         <p><strong>Address:</strong> {{ result.address_email }}</p>
-        <p><strong>Server:</strong> 10.10.10.16</p>
-        <p><strong>Port:</strong> 143</p>
-        <p><strong>Security:</strong> STARTTLS</p>
+        <p><strong>Server:</strong> {% if is_local %}127.0.0.1{% else %}{{ imap_srv }}{% endif %}</p>
+        <p><strong>Port:</strong> {% if is_local %}1143{% else %}{{ imap_p }}{% endif %}</p>
+        <p><strong>Security:</strong> None (alpha{% if is_local %}, local tunnel{% endif %})</p>
         <p><strong>Username:</strong> {{ result.address_email }}</p>
         <p><strong>Password:</strong> <em>the password you just defined</em></p>
+
+        {% if is_local %}
+        <div style="margin-top: 8px; padding: 8px; background: #fff3cd; border-radius: 4px;">
+            <strong>SSH tunnel required (IMAP/SMTP bound to 127.0.0.1):</strong><br>
+            <code>ssh -L 1143:127.0.0.1:143 -L 12525:127.0.0.1:2525 user@vm</code><br>
+            <small>SMTP server: 127.0.0.1 port 12525, security: None</small>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -36,12 +51,20 @@
         <strong>Sync output:</strong>
         <pre style="white-space: pre-wrap; font-size: 13px;">{{ result.sync_output }}</pre>
     </div>
-    {% endif %}
+{% endif %}
 
-    {% if not result.sync_applied and result.imap_configured %}
+{% if result.sync_applied %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <p><strong>Sync applied.</strong> Restart Dovecot to pick up the changes:</p>
+    <pre>docker compose restart dovecot</pre>
+</div>
+{% endif %}
+
+{% if not result.sync_applied and result.imap_configured %}
     <div class="card" style="margin-top: 16px; background: #fff3cd;">
         <p><strong>IMAP sync was not applied.</strong></p>
-        <p>Go to <a href="/dashboard/imap-sync">IMAP Sync</a> or configure sudoers and run Apply Sync.</p>
+        <p>Go to <a href="/dashboard/imap-sync">IMAP Sync</a> or run manually:</p>
+        <pre>docker compose exec api python3 -m worker.mailbox_admin sync-imap-users --apply</pre>
     </div>
     {% endif %}
 

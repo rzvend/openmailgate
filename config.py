@@ -97,6 +97,8 @@ DOVECOT_USERS_FILE = _env("DOVECOT_USERS_FILE", "/etc/dovecot/users")
 DOVECOT_MAIL_ROOT = _env("DOVECOT_MAIL_ROOT", str(MAILDIR_BASE))
 IMAP_BIND = _env("IMAP_BIND", "127.0.0.1")
 IMAP_PORT = _int_env("IMAP_PORT", 143)
+SMTP_BIND = _env("SMTP_BIND", "127.0.0.1")
+SMTP_PORT = _int_env("SMTP_PORT", 2525)
 
 APP_VERSION = "0.1.0-dev"
 

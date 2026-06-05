@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 import worker.dovecot_users as du
 
 from api.auth import require_login
-from config import DB_PATH, DOVECOT_USERS_FILE, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX
+from config import DB_PATH, DOVECOT_USERS_FILE, IMAP_BIND, IMAP_PORT, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX, SMTP_BIND, SMTP_PORT
 from database import (
     clear_catch_all_mailbox,
     clear_inbound_archive_mailbox,
@@ -182,10 +182,9 @@ def mailbox_wizard_submit(request: Request,
 
     # Run sync if requested
     if run_sync:
-        wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
         try:
             sync_proc = subprocess.run(
-                ["sudo", str(wrapper)],
+                [sys.executable, "-m", "worker.mailbox_admin", "sync-imap-users", "--apply"],
                 capture_output=True, text=True, timeout=30, shell=False,
             )
             result["sync_output"] = sync_proc.stdout + sync_proc.stderr
@@ -195,7 +194,9 @@ def mailbox_wizard_submit(request: Request,
             result["sync_output"] = f"Sync failed: {e}"
 
     return request.app.state.templates.TemplateResponse(
-        request, "mailbox_wizard.html", {"error": None, "result": result}
+        request, "mailbox_wizard.html", {"error": None, "result": result,
+         "imap_bind": IMAP_BIND, "imap_port": IMAP_PORT,
+         "smtp_bind": SMTP_BIND, "smtp_port": SMTP_PORT}
     )
 
 
@@ -1023,10 +1024,9 @@ def setup_first_mailbox_submit(
 
     # Run sync
     if run_sync:
-        wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
         try:
             proc = subprocess.run(
-                ["sudo", str(wrapper)],
+                [sys.executable, "-m", "worker.mailbox_admin", "sync-imap-users", "--apply"],
                 capture_output=True, text=True, timeout=30, shell=False,
             )
             result["sync_output"] = proc.stdout + proc.stderr
@@ -1037,7 +1037,8 @@ def setup_first_mailbox_submit(
 
     return request.app.state.templates.TemplateResponse(
         request, "setup_first_mailbox.html",
-        {"result": result, "error": None}
+        {"result": result, "imap_bind": IMAP_BIND, "imap_port": IMAP_PORT,
+         "smtp_bind": SMTP_BIND, "smtp_port": SMTP_PORT, "error": None}
     )
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
@@ -1368,10 +1369,9 @@ def imap_sync_apply(request: Request):
     _auth = require_login(request)
     if _auth: return _auth
 
-    wrapper = Path(__file__).resolve().parents[2] / "scripts" / "sync_imap_users_apply.sh"
     try:
         result = subprocess.run(
-            ["sudo", str(wrapper)],
+            [sys.executable, "-m", "worker.mailbox_admin", "sync-imap-users", "--apply"],
             capture_output=True, text=True, timeout=30, shell=False,
         )
         output = result.stdout + result.stderr
@@ -1384,7 +1384,7 @@ def imap_sync_apply(request: Request):
         return request.app.state.templates.TemplateResponse(
             request, "imap_sync.html",
             {"output": "",
-             "error": "sudo not available. Configure sudoers for scripts/sync_imap_users_apply.sh or run manually."}
+             "error": "sync-imap-users not available. Ensure the container image includes worker.mailbox_admin."}
         )
     except Exception as e:
         return request.app.state.templates.TemplateResponse(
