@@ -155,7 +155,7 @@ def apply_users_file(new_entries, target_path="/etc/dovecot/users", group="dovec
     # Atomic rename
     tmp.rename(target)
     print(f"Wrote {len(new_entries)} user(s) to {target}")
-    print("Validate with: sudo doveadm user <email>")
+    print("Validate with: doveadm user <email>")
 
 
 def cmd_sync(args, db_path):
