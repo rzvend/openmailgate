@@ -687,12 +687,12 @@ def _release_iac_lock(lf):
             pass
 
 
-def _run_iac_command(tool, args, workdir, env):
+def _run_iac_command(tool, args, workdir, env, timeout=120):
     binary = tool  # "terraform" or "tofu"
     try:
         result = _sp.run(
             [binary] + args,
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, timeout=timeout,
             cwd=workdir, env=env, shell=False,
         )
         output = result.stdout + result.stderr
@@ -785,7 +785,7 @@ def setup_iac_init(request: Request):
                            error="Another IAC job is already running.")
     try:
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
-        code, output = _run_iac_command(tool, ["init", "-no-color"], workdir, env)
+        code, output = _run_iac_command(tool, ["init", "-input=false", "-no-color"], workdir, env)
         hint = classify_iac_error(output) if code != 0 else None
         return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
     finally:
@@ -806,9 +806,10 @@ def setup_iac_plan(request: Request):
     try:
         plan_file = f"{state_dir}/last.tfplan"
         env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
-        code, output = _run_iac_command(tool, ["plan", "-no-color", "-out", plan_file], workdir, env)
+        code, output = _run_iac_command(tool, ["plan", "-input=false", "-no-color", "-out", plan_file], workdir, env, timeout=600)
         hint = classify_iac_error(output) if code != 0 else None
-        return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
+        plan_summary = _parse_plan_summary(output) if code == 0 else None
+        return _render_iac(request, tool, workdir, output=output, error=None, hint=hint, plan_summary=plan_summary)
     finally:
         _release_iac_lock(lock)
 
@@ -847,14 +848,33 @@ def setup_iac_apply(
         _release_iac_lock(lock)
 
 
-def _render_iac(request, tool, workdir, output, error, hint=None):
+def _render_iac(request, tool, workdir, output, error, hint=None, plan_summary=None):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
     return request.app.state.templates.TemplateResponse(
         request, "setup_iac.html",
         {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
-         "output": output, "error": error, "hint": hint}
+         "output": output, "error": error, "hint": hint, "plan_summary": plan_summary}
     )
+
+
+def _parse_plan_summary(output: str) -> dict | None:
+    """Parse tofu plan output for the summary line."""
+    if not output:
+        return None
+    m = _re.search(
+        r"Plan:\s*(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy",
+        output,
+    )
+    if m:
+        return {
+            "add": int(m.group(1)),
+            "change": int(m.group(2)),
+            "destroy": int(m.group(3)),
+        }
+    if "No changes." in output or "Your infrastructure matches" in output:
+        return {"add": 0, "change": 0, "destroy": 0}
+    return None
 
 
 def _run_setup_checks():

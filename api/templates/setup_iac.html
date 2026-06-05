@@ -43,6 +43,17 @@
 </div>
 {% endif %}
 
+{% if plan_summary %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <h3>Plan Summary</h3>
+    <table>
+        <tr><td><strong>Add</strong></td><td>{{ plan_summary.add or 0 }}</td></tr>
+        <tr><td><strong>Change</strong></td><td>{{ plan_summary.change or 0 }}</td></tr>
+        <tr><td><strong>Destroy</strong></td><td>{{ plan_summary.destroy or 0 }}</td></tr>
+    </table>
+</div>
+{% endif %}
+
 <h2 style="margin-top: 24px;">Apply</h2>
 <div class="card" style="background: #f8d7da; border: 1px solid #e74c3c;">
     <p><strong>WARNING: apply will create or update real cloud resources.</strong></p>
