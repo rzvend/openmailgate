@@ -62,13 +62,13 @@ docker compose run --rm api python3 worker/migrate.py
 echo "      Migrations applied"
 
 echo "[5/5] Bootstrapping initial admin operator..."
-if docker compose run --rm api python3 scripts/bootstrap_admin.py; then
-    echo ""
-    echo "      IMPORTANT: Save the admin password shown above."
-    echo "      It will not be displayed again."
-else
-    echo "      Bootstrap skipped or failed. You may need to create an operator manually."
-fi
+echo ""
+echo "      Open the dashboard in your browser to create the first administrator:"
+echo "        http://SERVER_IP:8000"
+echo ""
+echo "      Or use the CLI fallback:"
+echo "        docker compose run --rm api python3 scripts/bootstrap_admin.py"
+echo ""
 
 echo ""
 echo "=== Ready ==="

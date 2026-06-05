@@ -55,3 +55,26 @@ def require_login(request: Request):
     if not get_current_operator(request):
         return RedirectResponse(url="/auth/login", status_code=302)
     return None
+
+
+# ── Admin setup guard (prevents dashboard access before first admin) ─────
+
+_SETUP_ALLOWED_PATHS = ("/setup", "/health", "/static/", "/favicon.ico")
+
+
+def require_admin_setup(request: Request):
+    """If no admin exists, redirect to /setup unless on an allowed path.
+
+    Returns None if the request should proceed normally, or a RedirectResponse
+    that forces the user to the setup page.
+    """
+    from database import count_active_operators  # noqa: E402
+
+    if count_active_operators() > 0:
+        return None
+
+    path = request.url.path
+    if any(path.startswith(p) for p in _SETUP_ALLOWED_PATHS):
+        return None
+
+    return RedirectResponse(url="/setup", status_code=302)
