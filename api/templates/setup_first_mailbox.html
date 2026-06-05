@@ -45,6 +45,7 @@
         <tr><td><strong>SMTP Server</strong></td><td>{% if is_local %}127.0.0.1{% else %}{{ smtp_srv }}{% endif %}</td></tr>
         <tr><td><strong>SMTP Port</strong></td><td>{% if is_local %}12525{% else %}{{ smtp_p }}{% endif %}</td></tr>
         <tr><td><strong>SMTP Security</strong></td><td>None (alpha{% if is_local %}, local tunnel{% endif %})</td></tr>
+        <tr><td><strong>SMTP Authentication</strong></td><td>None (smtp-sender alpha)</td></tr>
     </table>
 </div>
 {% endif %}

@@ -50,8 +50,8 @@
         <p><strong>Server:</strong> {% if is_local %}127.0.0.1{% else %}{{ smtp_srv }}{% endif %}</p>
         <p><strong>Port:</strong> {% if is_local %}12525{% else %}{{ smtp_p }}{% endif %}</p>
         <p><strong>Security:</strong> None (alpha{% if is_local %}, local tunnel{% endif %})</p>
-        <p><strong>Username:</strong> {{ result.address_email }}</p>
-        <p><strong>Password:</strong> <em>the password you just defined, if SMTP auth is enabled</em></p>
+        <p><strong>Authentication:</strong> None (smtp-sender alpha)</p>
+        <p><strong>Username:</strong> <em>leave blank / not used</em></p>
     </div>
     {% endif %}
 
