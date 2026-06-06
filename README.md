@@ -7,7 +7,7 @@ Recebimento, armazenamento e leitura de e-mails usando Amazon SES, S3, SQS e Dov
 ```
 Amazon SES Receiving
     ↓
-S3 bucket (ricardo-vc-ses-mailbox)
+S3 bucket (openmailgate-example-mailbox)
     ↓
 S3 Event Notification → SQS queue
     ↓
@@ -66,13 +66,13 @@ ses-s3-mailbox/
 
 ### Permissões IAM necessárias
 
-**S3** (bucket `ricardo-vc-ses-mailbox`):
+**S3** (bucket `openmailgate-example-mailbox`):
 - `s3:ListBucket`
 - `s3:GetObject`
 - `s3:PutObject`
 - `s3:DeleteObject`
 
-**SQS** (fila `ses-s3-mailbox-incoming`):
+**SQS** (fila `openmailgate-example-incoming`):
 - `sqs:ReceiveMessage`
 - `sqs:DeleteMessage`
 - `sqs:GetQueueAttributes`
@@ -95,7 +95,7 @@ Variáveis:
 | Variável | Descrição | Padrão |
 |---|---|---|
 | `AWS_REGION` | Região AWS | `us-east-1` |
-| `S3_BUCKET` | Nome do bucket S3 | `ricardo-vc-ses-mailbox` |
+| `S3_BUCKET` | Nome do bucket S3 | `openmailgate-example-mailbox` |
 | `S3_INCOMING_PREFIX` | Prefixo de entrada | `incoming/` |
 | `S3_PROCESSED_PREFIX` | Prefixo de processados | `processed/` |
 | `S3_FAILED_PREFIX` | Prefixo de falhas | `failed/` |
@@ -124,17 +124,17 @@ Este script configura:
 **SQS Queue:**
 ```bash
 aws sqs create-queue \
-  --queue-name ses-s3-mailbox-incoming \
+  --queue-name openmailgate-example-incoming \
   --region us-east-1
 ```
 
 **S3 Event Notification (com filtro incoming/):**
 ```bash
 aws s3api put-bucket-notification-configuration \
-  --bucket ricardo-vc-ses-mailbox \
+  --bucket openmailgate-example-mailbox \
   --notification-configuration '{
     "QueueConfigurations": [{
-      "QueueArn": "arn:aws:sqs:us-east-1:ACCOUNT_ID:ses-s3-mailbox-incoming",
+      "QueueArn": "arn:aws:sqs:us-east-1:ACCOUNT_ID:openmailgate-example-incoming",
       "Events": ["s3:ObjectCreated:*"],
       "Filter": {
         "Key": {"FilterRules": [{"Name": "prefix", "Value": "incoming/"}]}
@@ -152,7 +152,7 @@ Configuração e operação do worker SQS.
 ### 1. Configurar .env
 
 ```env
-SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/121234001765/ses-s3-mailbox-incoming
+SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789012/openmailgate-example-incoming
 SQS_WAIT_TIME_SECONDS=20
 SQS_MAX_MESSAGES=10
 ```
@@ -160,7 +160,7 @@ SQS_MAX_MESSAGES=10
 ### 2. Criar/verificar fila SQS
 
 ```bash
-aws sqs get-queue-url --queue-name ses-s3-mailbox-incoming --region us-east-1
+aws sqs get-queue-url --queue-name openmailgate-example-incoming --region us-east-1
 ```
 
 ### 3. Configurar SQS + S3 notification
@@ -189,7 +189,7 @@ journalctl -u ses-s3-mailbox-sqs-worker -f
 
 ### 7. Testar com e-mail real
 
-Enviar e-mail para `teste@inbox.ricardo.vc`.
+Enviar e-mail para `teste@mail.example.com`.
 
 Resultado esperado no log:
 ```
@@ -197,15 +197,15 @@ Resultado esperado no log:
 [INFO] Processing incoming/<id> (event: ObjectCreated:Put)
 [INFO] Downloading: incoming/<id> (NNNN bytes)
 [INFO] OK  incoming/<id>
-[INFO] Moved s3://ricardo-vc-ses-mailbox/incoming/<id> → processed/<id>
+[INFO] Moved s3://openmailgate-example-mailbox/incoming/<id> → processed/<id>
 ```
 
 ### 8. Verificar bucket S3
 
 ```bash
-aws s3 ls s3://ricardo-vc-ses-mailbox/incoming/ --recursive
-aws s3 ls s3://ricardo-vc-ses-mailbox/processed/ --recursive
-aws s3 ls s3://ricardo-vc-ses-mailbox/failed/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/incoming/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/processed/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/failed/ --recursive
 ```
 
 Esperado: `incoming/` vazio, `processed/` com o novo objeto, `failed/` vazio.
@@ -276,9 +276,9 @@ sqlite3 data/mailbox.db "SELECT id, s3_key, sender, subject, status FROM message
 
 **Bucket S3:**
 ```bash
-aws s3 ls s3://ricardo-vc-ses-mailbox/incoming/ --recursive
-aws s3 ls s3://ricardo-vc-ses-mailbox/processed/ --recursive
-aws s3 ls s3://ricardo-vc-ses-mailbox/failed/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/incoming/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/processed/ --recursive
+aws s3 ls s3://openmailgate-example-mailbox/failed/ --recursive
 ```
 
 ## Fluxo detalhado
@@ -333,7 +333,7 @@ SES_SMTP_STARTTLS=true
 
 ### 2. Domínio/remetente verificado
 
-- O domínio `inbox.ricardo.vc` deve estar verificado no SES.
+- O domínio `mail.example.com` deve estar verificado no SES.
 - Se a conta SES estiver em **sandbox**, só pode enviar para destinatários verificados.
 - O `From:` do e-mail e o envelope `MAIL FROM` devem ser de um domínio/identidade verificada.
 
@@ -342,15 +342,15 @@ SES_SMTP_STARTTLS=true
 O SES aceita o relay mesmo sem DKIM próprio, mas provedores como Gmail aplicam **DMARC** e rejeitam e-mails sem assinatura DKIM alinhada ao domínio do `From:`.
 
 ```
-From: teste@inbox.ricardo.vc
+From: teste@mail.example.com
 DKIM: d=amazonses.com       ← não alinhado → rejeitado pelo Gmail
-DKIM: d=inbox.ricardo.vc    ← alinhado       → aceito
+DKIM: d=mail.example.com    ← alinhado       → aceito
 ```
 
 Erro comum sem DKIM:
 
 ```
-550-5.7.26 Unauthenticated email from ricardo.vc is not accepted
+550-5.7.26 Unauthenticated email from example.com is not accepted
 due to domain's DMARC policy.
 ```
 
@@ -358,7 +358,7 @@ O Terraform já inclui Easy DKIM (`aws_ses_domain_dkim`) e publica os 3 registro
 
 ```bash
 cd terraform && terraform apply
-aws ses get-identity-dkim-attributes --identities inbox.ricardo.vc --region us-east-1
+aws ses get-identity-dkim-attributes --identities mail.example.com --region us-east-1
 # Esperado: DkimVerificationStatus = Success
 ```
 
@@ -387,7 +387,7 @@ Autenticação: Nenhuma (controle por IP)
 
 - A porta 2525 **não deve ser exposta à internet**.
 - Apenas IPs na variável `LOCAL_SMTP_ALLOWED_NETWORKS` podem conectar.
-- Configuração padrão: `127.0.0.1/32,10.10.10.0/24,100.64.0.0/10` (localhost + Tailscale).
+- Configuração padrão: `127.0.0.1/32,192.0.2.0/24,100.64.0.0/10` (localhost + Tailscale).
 - Autenticação SMTP pode ser implementada futuramente.
 
 ### 8. Verificar envio
