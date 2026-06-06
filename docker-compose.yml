@@ -23,6 +23,7 @@ services:
       - iac_state:/app/state/iac
       - iac_setup_logs:/app/logs/setup
       - dovecot_data:/app/dovecot
+      - ./.env:/app/.env:rw
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]

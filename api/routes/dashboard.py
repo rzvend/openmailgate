@@ -1230,6 +1230,183 @@ def setup_validate_run(request: Request):
     )
 
 
+# ── runtime configuration sync ──────────────────────────────────────────
+
+
+def _read_tofu_outputs():
+    """Return parsed tofu output dict, or {} if unavailable."""
+    import json
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    try:
+        result = _sp.run(
+            ["tofu", "output", "-json", "-no-color"],
+            capture_output=True, text=True, timeout=30,
+            cwd=workdir, shell=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    return {}
+
+
+def _backup_env_file():
+    """Create a timestamped backup of .env in the persistent state directory."""
+    from datetime import datetime
+    env_path = Path("/app/.env")
+    if not env_path.exists():
+        return None
+    state_dir = Path(_os.getenv("IAC_STATE_DIR", "/app/state/iac"))
+    state_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = state_dir / f".env.bak.{ts}"
+    try:
+        backup.write_text(env_path.read_text())
+        return str(backup)
+    except OSError:
+        return None
+
+
+_OUTPUT_ENV_MAP = {
+    "mail_bucket": "S3_BUCKET",
+    "sqs_queue_url": "SQS_QUEUE_URL",
+    "ses_smtp_username": "SES_SMTP_USERNAME",
+    "ses_smtp_password": "SES_SMTP_PASSWORD",
+    "test_email_domain": "DEFAULT_FROM_DOMAIN",
+}
+
+_SENSITIVE_KEYS = {"SES_SMTP_PASSWORD", "SES_SMTP_USERNAME"}
+
+
+def _get_runtime_status():
+    """Return a list of dicts with runtime env status compared to tofu outputs."""
+    outputs = _read_tofu_outputs()
+    rows = []
+    for tf_key, env_key in _OUTPUT_ENV_MAP.items():
+        out = outputs.get(tf_key, {})
+        expected = out.get("value", "") if isinstance(out, dict) else ""
+        current = _os.getenv(env_key, "")
+        is_sensitive = env_key in _SENSITIVE_KEYS
+
+        if is_placeholder(current):
+            status = "placeholder"
+        elif not current:
+            status = "missing"
+        elif is_placeholder(expected) or not expected:
+            status = "configured"
+        elif current.strip() == expected.strip():
+            status = "ok"
+        else:
+            status = "differs"
+
+        row = {
+            "key": env_key,
+            "current": "***configured***" if (is_sensitive and current and not is_placeholder(current)) else (current or ""),
+            "expected": "***configured***" if (is_sensitive and expected) else (expected or ""),
+            "status": status,
+            "sensitive": is_sensitive,
+        }
+        rows.append(row)
+    return rows
+
+
+def _update_env_file(overwrite=False):
+    """Update .env with tofu outputs. Returns (updated_keys, errors)."""
+    outputs = _read_tofu_outputs()
+    env_path = Path("/app/.env")
+    if not env_path.exists():
+        return [], [".env file not found at /app/.env"]
+
+    lines = env_path.read_text().splitlines(keepends=True) if hasattr(env_path.read_text(), "splitlines") else None
+    try:
+        content = env_path.read_text()
+        lines_out = []
+        updated = set()
+        seen_keys = set()
+
+        for line in content.split("\n"):
+            stripped = line.strip()
+            # Preserve comments and blank lines
+            if not stripped or stripped.startswith("#"):
+                lines_out.append(line)
+                continue
+
+            # Parse KEY=VALUE
+            if "=" in stripped:
+                key = stripped.split("=", 1)[0].strip()
+                seen_keys.add(key)
+                if key in _OUTPUT_ENV_MAP.values():
+                    tf_key = {v: k for k, v in _OUTPUT_ENV_MAP.items()}[key]
+                    out = outputs.get(tf_key, {})
+                    new_val = out.get("value", "") if isinstance(out, dict) else ""
+                    if new_val and (is_placeholder(_os.getenv(key, "")) or overwrite or not _os.getenv(key)):
+                        lines_out.append(f"{key}={new_val}")
+                        updated.add(key)
+                    else:
+                        lines_out.append(line)
+                else:
+                    lines_out.append(line)
+            else:
+                lines_out.append(line)
+
+        # Add any missing keys at the end
+        for tf_key, env_key in _OUTPUT_ENV_MAP.items():
+            if env_key not in seen_keys:
+                out = outputs.get(tf_key, {})
+                new_val = out.get("value", "") if isinstance(out, dict) else ""
+                if new_val and (is_placeholder("") or overwrite):
+                    lines_out.append(f"{env_key}={new_val}")
+                    updated.add(env_key)
+
+        env_path.write_text("\n".join(lines_out) + "\n")
+        return sorted(updated), []
+    except OSError as e:
+        return [], [str(e)]
+
+
+@router.get("/dashboard/setup/runtime")
+def setup_runtime_page(request: Request):
+    _auth = require_login(request)
+    if _auth: return _auth
+    rows = _get_runtime_status()
+    outputs_available = bool(_read_tofu_outputs())
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_runtime.html",
+        {"rows": rows, "outputs_available": outputs_available, "result": None, "error": None}
+    )
+
+
+@router.post("/dashboard/setup/runtime/update")
+def setup_runtime_update(
+    request: Request,
+    confirmation: str = Form(""),
+):
+    _auth = require_login(request)
+    if _auth: return _auth
+
+    expected = "I understand this will update my local .env runtime configuration"
+    if confirmation.strip() != expected:
+        return request.app.state.templates.TemplateResponse(
+            request, "setup_runtime.html",
+            {"rows": _get_runtime_status(), "outputs_available": True,
+             "result": None, "error": "Confirmation phrase did not match."}
+        )
+
+    backup_file = _backup_env_file()
+    updated, errors = _update_env_file()
+
+    result = {
+        "backup": backup_file,
+        "updated": updated,
+        "errors": errors,
+    }
+    return request.app.state.templates.TemplateResponse(
+        request, "setup_runtime.html",
+        {"rows": _get_runtime_status(), "outputs_available": True,
+         "result": result, "error": None}
+    )
+
+
 # ── setup first mailbox ────────────────────────────────────────────────
 
 
