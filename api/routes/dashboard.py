@@ -775,16 +775,45 @@ def _ensure_resource_suffix():
     return suffix
 
 
+# ── Placeholder detection for .env fallback values ─────────────────────
+
+_PLACEHOLDERS = frozenset({
+    "change_me", "changeme", "fill_me", "fill_after_terraform_apply",
+    "todo", "replace_me", "example", "example_com", "your_value",
+    "your_domain_com",
+})
+
+
+def _is_placeholder(value):
+    """Return True if *value* is a known placeholder that should be treated as unset."""
+    if not value:
+        return True
+    v = value.strip().lower().replace("-", "_").replace(" ", "_")
+    return v in _PLACEHOLDERS or "change_me" in v or "fill_me" in v
+
+
+def _env_or_auto(name, default_func):
+    """Return env var value if valid, otherwise call *default_func*()."""
+    value = _os.getenv(name)
+    if value and not _is_placeholder(value):
+        return value.strip()
+    return default_func()
+
+
 def _iac_resource_names():
     """Return dict of Terraform resource names with unique suffix."""
     suffix = _ensure_resource_suffix()
     return {
         "resource_suffix": suffix,
-        "mail_bucket_name": _os.getenv("S3_BUCKET") or f"ses-openmailgate-{suffix}-mailbox",
-        "sqs_queue_name": _os.getenv("SQS_QUEUE_NAME") or f"ses-openmailgate-{suffix}-incoming",
-        "rule_set_name": _os.getenv("SES_RULE_SET") or f"ses-s3-mailbox-{suffix}-rules",
+        "mail_bucket_name": _env_or_auto("S3_BUCKET",
+            lambda: f"ses-openmailgate-{suffix}-mailbox"),
+        "sqs_queue_name": _env_or_auto("SQS_QUEUE_NAME",
+            lambda: f"ses-openmailgate-{suffix}-incoming"),
+        "rule_set_name": _env_or_auto("SES_RULE_SET",
+            lambda: f"ses-s3-mailbox-{suffix}-rules"),
         "receipt_rule_name": f"store-in-s3-{suffix}",
-        "smtp_iam_user": _os.getenv("SMTP_IAM_USER") or f"ses-s3-mailbox-{suffix}-smtp",
+        "smtp_iam_user": _env_or_auto("SMTP_IAM_USER",
+            lambda: f"ses-s3-mailbox-{suffix}-smtp"),
     }
 
 
