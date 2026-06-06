@@ -246,6 +246,50 @@ records may already be in use and referenced by other services.
 You can also use the **Show state** button on the `/dashboard/setup/iac` page
 to inspect the current state from the dashboard.
 
+### 4c. Guided import/adopt recovery
+
+The dashboard offers a guided import mode for resources that exist outside the
+OpenTofu state. This imports the resources into the state without deleting or
+recreating them.
+
+**When to use:**
+- After detecting conflicts with **Check conflicts**.
+- When resources appear as `exists_outside_state`.
+- After a partial apply or when reusing existing resources.
+
+**What is imported automatically:**
+
+| Resource | Provider | Import ID |
+|---|---|---|
+| `aws_s3_bucket.mail_bucket` | AWS | Bucket name |
+| `aws_sqs_queue.mail_queue` | AWS | Queue URL (discovered via API) |
+| `aws_ses_domain_identity.domain` | AWS | Domain |
+| `aws_ses_receipt_rule_set.main` | AWS | Rule set name |
+| `aws_iam_user.ses_smtp_sender` | AWS | IAM user name |
+| `cloudflare_dns_record.mx_inbox` | Cloudflare | DNS record ID (discovered via API) |
+| `cloudflare_dns_record.ses_verification` | Cloudflare | DNS record ID (discovered via API) |
+
+**What is NOT imported automatically:**
+
+- **DKIM CNAME records** — must be matched to the correct Terraform index
+  (`ses_dkim[0]`, `[1]`, `[2]`). Import manually if needed.
+- **IAM access keys** — secrets are not recoverable.
+- **Ambiguous resources** — multiple matches found.
+- **Resources with errors** — API check failed.
+
+**How to use:**
+1. Open `/dashboard/setup/iac`.
+2. Click **Check conflicts**.
+3. Review the adopt table.
+4. Paste the confirmation text: `I understand this will import existing resources into OpenTofu state`
+5. Click **Adopt existing resources**.
+6. After import completes, run **Plan** again.
+7. Only proceed to **Apply** when the plan is safe.
+
+**Important:** The guided import does not delete or recreate any resources.
+It only places existing resources under OpenTofu state management. After
+import, the dashboard does not automatically run `apply`.
+
 ---
 
 ## 5. Access denied / invalid AWS credentials

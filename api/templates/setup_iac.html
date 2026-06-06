@@ -113,6 +113,46 @@
 </div>
 {% endif %}
 
+{% if conflicts and has_blocking > 0 %}
+{% set adoptable = conflicts | selectattr('status', 'equalto', 'exists_outside_state') | list %}
+{% if adoptable | length > 0 %}
+<div class="card" style="margin-top: 16px; background: #d4edda;">
+    <h3>Guided Recovery / Adopt Existing Resources</h3>
+    <p>Some resources already exist outside OpenTofu state. You can adopt them into the current state so OpenTofu stops trying to recreate them.</p>
+    <p><strong>This does not delete or recreate the resources.</strong> Review carefully before continuing.</p>
+    <p class="muted">DKIM CNAME records are not imported automatically. They must be matched to the correct Terraform index manually.</p>
+
+    <table style="margin-top: 8px;">
+        <thead><tr><th>Resource</th><th>Provider</th><th>Expected Name</th><th>Importable</th></tr></thead>
+        <tbody>
+        {% for c in adoptable %}
+        <tr>
+            <td><code>{{ c.resource }}</code></td>
+            <td>{{ c.provider }}</td>
+            <td>{{ c.expected_name }}</td>
+            <td>
+                {% if 'ses_dkim' in c.resource %}
+                <span class="badge badge-fallback">manual only</span>
+                {% else %}
+                <span class="badge badge-active">yes</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <form method="post" action="/dashboard/setup/iac/adopt" style="margin-top: 12px;">
+        <p><strong>Confirmation required:</strong></p>
+        <input type="text" name="confirmation" placeholder="I understand this will import existing resources into OpenTofu state" required
+               style="padding: 8px; width: 100%; max-width: 600px; margin-bottom: 8px;">
+        <br>
+        <button type="submit" style="padding: 8px 20px; background: #27ae60; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Adopt existing resources</button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
 <h2 style="margin-top: 24px;">Apply</h2>
 {% if not conflicts or has_blocking == 0 %}
 <div class="card" style="background: #f8d7da; border: 1px solid #e74c3c;">

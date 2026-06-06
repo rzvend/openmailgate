@@ -916,6 +916,50 @@ def setup_iac_conflicts(request: Request):
     return _render_iac(request, tool, workdir, output=None, error=None, conflicts=conflicts)
 
 
+@router.post("/dashboard/setup/iac/adopt")
+def setup_iac_adopt(
+    request: Request,
+    confirmation: str = Form(""),
+):
+    """Import existing resources into tofu state with explicit user confirmation."""
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+
+    expected = "I understand this will import existing resources into OpenTofu state"
+    if confirmation.strip() != expected:
+        return _render_iac(request, tool, workdir, output=None,
+                           error="Confirmation phrase did not match. Import was not executed.")
+
+    from api.iac_recovery import adopt_existing_resources
+
+    try:
+        results, skipped, errors = adopt_existing_resources()
+    except Exception as e:
+        return _render_iac(request, tool, workdir, output=None,
+                           error=f"Adopt failed: {e}")
+
+    # Build summary output
+    output_lines = ["=== Adopt Results ==="]
+    for r in results:
+        status = "SUCCESS" if r["success"] else "FAILED"
+        output_lines.append(f"  [{status}] {r['resource']} ← {r['import_id']}")
+    for s in skipped:
+        output_lines.append(f"  [SKIPPED] {s['resource']}: {s['reason']}")
+    if errors:
+        output_lines.append(f"\nErrors: {'; '.join(errors)}")
+    output = "\n".join(output_lines)
+
+    # After adopt, re-run conflict detection to show updated state
+    try:
+        conflicts = detect_preapply_conflicts()
+    except Exception:
+        conflicts = None
+
+    return _render_iac(request, tool, workdir, output=output, error=None, conflicts=conflicts)
+
+
 def _render_iac(request, tool, workdir, output, error, hint=None, plan_summary=None, conflicts=None):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")

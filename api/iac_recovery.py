@@ -334,3 +334,152 @@ def _cf_status_message(status, resource_label):
         "error": f"Could not check {resource_label} — Cloudflare API error.",
     }
     return messages.get(status, str(status))
+
+
+# ── Guided import/adopt ───────────────────────────────────────────────────
+
+
+def _discover_aws_import_id(resource_addr, region=None):
+    """Return the tofu import ID for an AWS resource, or None if not discoverable."""
+    from api.routes.dashboard import _iac_resource_names
+
+    names = _iac_resource_names()
+    region = region or os.getenv("AWS_REGION", "us-east-1")
+
+    try:
+        import boto3
+
+        if resource_addr == "aws_s3_bucket.mail_bucket":
+            return names.get("mail_bucket_name", "")
+
+        if resource_addr == "aws_sqs_queue.mail_queue":
+            sqs = boto3.client("sqs", region_name=region)
+            queue_name = names.get("sqs_queue_name", "")
+            if queue_name:
+                resp = sqs.get_queue_url(QueueName=queue_name)
+                return resp.get("QueueUrl", "")
+
+        if resource_addr == "aws_ses_domain_identity.domain":
+            return os.getenv("DEFAULT_FROM_DOMAIN", "")
+
+        if resource_addr == "aws_ses_receipt_rule_set.main":
+            return names.get("rule_set_name", "")
+
+        if resource_addr == "aws_iam_user.ses_smtp_sender":
+            return names.get("smtp_iam_user", "")
+
+    except Exception:
+        pass
+    return None
+
+
+def _discover_cf_record_id(zone_id, token, record_type, name_filter):
+    """Return the Cloudflare DNS record ID for type+name, or None."""
+    try:
+        import httpx2 as httpx
+        r = httpx.get(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
+            f"?type={record_type}&name={name_filter}&per_page=10",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if r.status_code == 200 and r.json().get("success"):
+            records = r.json().get("result", [])
+            if len(records) == 1:
+                return records[0]["id"]
+    except Exception:
+        pass
+    return None
+
+
+def build_import_plan():
+    """Return a list of (resource_addr, import_id, provider) tuples for
+    resources that exist outside state and can be safely imported.
+    """
+    conflicts = detect_preapply_conflicts()
+    zone_id = os.getenv("CLOUDFLARE_ZONE_ID", "")
+    cf_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    domain = os.getenv("DEFAULT_FROM_DOMAIN", "")
+    region = os.getenv("AWS_REGION", "us-east-1")
+
+    plan = []
+    skipped = []
+
+    for c in conflicts:
+        if c.get("status") != "exists_outside_state":
+            continue
+
+        addr = c.get("resource", "")
+        provider = c.get("provider", "")
+
+        # Skip resources that should not be imported automatically
+        if "ses_dkim" in addr:
+            skipped.append({
+                "resource": addr,
+                "reason": "DKIM CNAME must be matched to correct index — import manually.",
+                "manual_required": True,
+            })
+            continue
+
+        import_id = None
+
+        if provider == "AWS":
+            import_id = _discover_aws_import_id(addr, region)
+        elif provider == "Cloudflare":
+            if addr == "cloudflare_dns_record.mx_inbox":
+                import_id = _discover_cf_record_id(zone_id, cf_token, "MX", domain)
+            elif addr == "cloudflare_dns_record.ses_verification":
+                import_id = _discover_cf_record_id(zone_id, cf_token, "TXT", f"_amazonses.{domain}")
+
+        if import_id:
+            plan.append((addr, import_id, provider))
+        else:
+            skipped.append({
+                "resource": addr,
+                "reason": "Could not discover import ID.",
+                "manual_required": True,
+            })
+
+    return plan, skipped
+
+
+def adopt_existing_resources():
+    """Run tofu import for each adoptable resource. Returns (results, skipped, errors)."""
+    from api.routes.dashboard import _run_iac_command
+
+    plan, skipped = build_import_plan()
+    results = []
+    errors = []
+    workdir = os.getenv("IAC_WORKDIR", "/app/iac")
+    env = os.environ.copy()
+
+    for resource_addr, import_id, provider in plan:
+        # Re-check: is resource already in state?
+        state = _get_tofu_state_resources()
+        if resource_addr in state:
+            results.append({
+                "resource": resource_addr,
+                "provider": provider,
+                "import_id": _masked(import_id),
+                "success": True,
+                "output": "Already in state — skipped.",
+            })
+            continue
+
+        cmd_args = ["import", resource_addr, import_id]
+        code, output = _run_iac_command("tofu", cmd_args, workdir, env, timeout=60)
+
+        result = {
+            "resource": resource_addr,
+            "provider": provider,
+            "import_id": _masked(import_id),
+            "success": code == 0,
+            "output": output[:1000],
+        }
+        results.append(result)
+
+        if code != 0:
+            errors.append(f"{resource_addr}: import failed (exit {code})")
+            break  # Stop on first error
+
+    return results, skipped, errors
