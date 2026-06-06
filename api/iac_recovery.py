@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 
+from api.iac_config import is_placeholder, env_or_none, iac_mail_domain
+
 
 def _get_tofu_state_resources():
     """Return a set of resource addresses tracked in the current tofu state."""
@@ -42,7 +44,7 @@ def detect_preapply_conflicts():
     names = _iac_resource_names()
     state = _get_tofu_state_resources()
     region = os.getenv("AWS_REGION", "us-east-1")
-    domain = os.getenv("DEFAULT_FROM_DOMAIN", "")
+    domain = iac_mail_domain()
     cf_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
     cf_zone = os.getenv("CLOUDFLARE_ZONE_ID", "")
     mail_prefix = domain.split(".")[0] if domain else ""
@@ -360,7 +362,7 @@ def _discover_aws_import_id(resource_addr, region=None):
                 return resp.get("QueueUrl", "")
 
         if resource_addr == "aws_ses_domain_identity.domain":
-            return os.getenv("DEFAULT_FROM_DOMAIN", "")
+            return iac_mail_domain()
 
         if resource_addr == "aws_ses_receipt_rule_set.main":
             return names.get("rule_set_name", "")
@@ -452,7 +454,7 @@ def build_import_plan():
     conflicts = detect_preapply_conflicts()
     zone_id = os.getenv("CLOUDFLARE_ZONE_ID", "")
     cf_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
-    domain = os.getenv("DEFAULT_FROM_DOMAIN", "")
+    domain = iac_mail_domain()
     region = os.getenv("AWS_REGION", "us-east-1")
 
     plan = []

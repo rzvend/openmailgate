@@ -14,6 +14,7 @@ import worker.dovecot_users as du
 
 from api.auth import require_login
 from config import DB_PATH, DOVECOT_USERS_FILE, IMAP_BIND, IMAP_PORT, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX, SMTP_BIND, SMTP_PORT
+from api.iac_config import is_placeholder, env_or_none, iac_mail_domain
 from api.iac_recovery import detect_preapply_conflicts
 from database import (
     clear_catch_all_mailbox,
@@ -1028,7 +1029,7 @@ def _run_setup_checks():
     queue_url = _os.getenv("SQS_QUEUE_URL", "")
     cf_token = _os.getenv("CLOUDFLARE_API_TOKEN", "")
     cf_zone = _os.getenv("CLOUDFLARE_ZONE_ID", "")
-    mail_domain = _os.getenv("DEFAULT_FROM_DOMAIN", "")
+    mail_domain = iac_mail_domain()
     queue_arn = None
 
     # ── Load OpenTofu outputs ──────────────────────────────────────────
