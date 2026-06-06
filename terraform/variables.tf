@@ -1,5 +1,5 @@
 variable "domain" {
-  default = "openmailgate.ricardo.vc"
+  default = ""
 }
 
 variable "mail_bucket_name" {

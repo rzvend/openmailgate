@@ -806,6 +806,7 @@ def _iac_resource_names():
     suffix = _ensure_resource_suffix()
     return {
         "resource_suffix": suffix,
+        "domain": iac_mail_domain(),
         "mail_bucket_name": _env_or_auto("S3_BUCKET",
             lambda: f"ses-openmailgate-{suffix}-mailbox"),
         "sqs_queue_name": _env_or_auto("SQS_QUEUE_NAME",
