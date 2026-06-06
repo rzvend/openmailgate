@@ -34,6 +34,31 @@ except SystemExit as e:
         sys.exit(e.code)
 print("[entrypoint] Migrations applied.", flush=True)
 
+# ── Normalize Maildir ownership for existing mailboxes ─────────────────
+_MAILDIR_ROOT = Path(os.getenv("DOVECOT_MAIL_ROOT", "/app/data/maildir"))
+_DOVECOT_UID = int(os.getenv("DOVECOT_UID", "1000"))
+_DOVECOT_GID = int(os.getenv("DOVECOT_GID", "1000"))
+if _MAILDIR_ROOT.exists():
+    print("[entrypoint] Normalizing Maildir ownership...", flush=True)
+    for entry in _MAILDIR_ROOT.iterdir():
+        if entry.is_dir() and not entry.name.startswith("."):
+            try:
+                os.chown(entry, _DOVECOT_UID, _DOVECOT_GID)
+            except OSError:
+                pass
+            for root, dirs, files in os.walk(entry):
+                for d in dirs:
+                    try:
+                        os.chown(os.path.join(root, d), _DOVECOT_UID, _DOVECOT_GID)
+                    except OSError:
+                        pass
+                for f in files:
+                    try:
+                        os.chown(os.path.join(root, f), _DOVECOT_UID, _DOVECOT_GID)
+                    except OSError:
+                        pass
+    print("[entrypoint] Maildir ownership normalized.", flush=True)
+
 # ── Start the application ────────────────────────────────────────────────
 # Strip leading python3 / python if the compose command string includes it
 args = sys.argv[1:]

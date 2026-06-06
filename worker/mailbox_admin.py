@@ -48,9 +48,8 @@ def _die(msg):
 
 def _ensure_maildir(slug):
     base = MAILDIR_BASE / slug
-    for sub in ("cur", "new", "tmp", ".Sent/cur", ".Sent/new", ".Sent/tmp"):
-        (base / sub).mkdir(parents=True, exist_ok=True)
-    (base / ".Sent" / "maildirfolder").write_text("")
+    from database import ensure_maildir_structure
+    ensure_maildir_structure(base)
     return str(base)
 
 
