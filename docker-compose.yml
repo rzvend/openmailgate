@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   api:
     build: .
@@ -62,11 +60,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-
-  # ── Dovecot / Postfix — planned for G.2.x ───────────────────────────
-  #
-  # These services require further configuration and testing before
-  # they can be enabled in the default stack. See docs/deploy-docker.md.
 
   dovecot:
     image: dovecot/dovecot:2.3.21
