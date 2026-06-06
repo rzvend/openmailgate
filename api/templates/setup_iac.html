@@ -131,11 +131,7 @@
             <td>{{ c.provider }}</td>
             <td>{{ c.expected_name }}</td>
             <td>
-                {% if 'ses_dkim' in c.resource %}
-                <span class="badge badge-fallback">manual only</span>
-                {% else %}
                 <span class="badge badge-active">yes</span>
-                {% endif %}
             </td>
         </tr>
         {% endfor %}

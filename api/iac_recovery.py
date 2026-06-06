@@ -392,6 +392,59 @@ def _discover_cf_record_id(zone_id, token, record_type, name_filter):
     return None
 
 
+def _get_dkim_tokens(domain, region):
+    """Return the 3 DKIM tokens in Terraform order, or None."""
+    # 1. Try tofu state (most accurate — same order as aws_ses_domain_dkim)
+    workdir = os.getenv("IAC_WORKDIR", "/app/iac")
+    try:
+        result = subprocess.run(
+            ["tofu", "state", "show", "aws_ses_domain_dkim.domain"],
+            capture_output=True, text=True, timeout=30,
+            cwd=workdir, shell=False,
+        )
+        if result.returncode == 0:
+            tokens = re.findall(r'"([a-z0-9]{32})"', result.stdout)
+            if len(tokens) == 3:
+                return tokens
+    except Exception:
+        pass
+
+    # 2. Fallback: AWS SES API (same order as aws_ses_domain_dkim)
+    try:
+        import boto3
+        ses = boto3.client("ses", region_name=region)
+        dkim = ses.get_identity_dkim_attributes(Identities=[domain])
+        tokens = dkim.get("DkimAttributes", {}).get(domain, {}).get("DkimTokens", [])
+        if len(tokens) == 3:
+            return tokens
+    except Exception:
+        pass
+
+    return None
+
+
+def _discover_dkim_import_ids(domain, region):
+    """Return list of (resource_addr, import_id) for all 3 DKIM records,
+    or None if any token is ambiguous, missing, or lookups fail.
+    """
+    tokens = _get_dkim_tokens(domain, region)
+    if not tokens or len(tokens) != 3:
+        return None
+
+    zone_id = os.getenv("CLOUDFLARE_ZONE_ID", "")
+    cf_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    ids = []
+
+    for i, token in enumerate(tokens):
+        name = f"{token}._domainkey.{domain}"
+        record_id = _discover_cf_record_id(zone_id, cf_token, "CNAME", name)
+        if not record_id:
+            return None
+        ids.append((f"cloudflare_dns_record.ses_dkim[{i}]", record_id))
+
+    return ids
+
+
 def build_import_plan():
     """Return a list of (resource_addr, import_id, provider) tuples for
     resources that exist outside state and can be safely imported.
@@ -405,6 +458,18 @@ def build_import_plan():
     plan = []
     skipped = []
 
+    # DKIM — safe lookup with unambiguous matching
+    dkim_ids = _discover_dkim_import_ids(domain, region)
+    if dkim_ids is not None:
+        for addr, record_id in dkim_ids:
+            plan.append((addr, record_id, "Cloudflare"))
+    else:
+        skipped.append({
+            "resource": "cloudflare_dns_record.ses_dkim[0..2]",
+            "reason": "DKIM tokens ambiguous, incomplete, or missing — import manually.",
+            "manual_required": True,
+        })
+
     for c in conflicts:
         if c.get("status") != "exists_outside_state":
             continue
@@ -412,13 +477,8 @@ def build_import_plan():
         addr = c.get("resource", "")
         provider = c.get("provider", "")
 
-        # Skip resources that should not be imported automatically
+        # DKIM already handled above — skip here
         if "ses_dkim" in addr:
-            skipped.append({
-                "resource": addr,
-                "reason": "DKIM CNAME must be matched to correct index — import manually.",
-                "manual_required": True,
-            })
             continue
 
         import_id = None

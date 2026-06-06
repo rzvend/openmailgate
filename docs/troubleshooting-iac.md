@@ -268,14 +268,32 @@ recreating them.
 | `aws_iam_user.ses_smtp_sender` | AWS | IAM user name |
 | `cloudflare_dns_record.mx_inbox` | Cloudflare | DNS record ID (discovered via API) |
 | `cloudflare_dns_record.ses_verification` | Cloudflare | DNS record ID (discovered via API) |
+| `cloudflare_dns_record.ses_dkim[0]` | Cloudflare | DNS record ID (discovered via API, safe match) |
+| `cloudflare_dns_record.ses_dkim[1]` | Cloudflare | DNS record ID (discovered via API, safe match) |
+| `cloudflare_dns_record.ses_dkim[2]` | Cloudflare | DNS record ID (discovered via API, safe match) |
 
 **What is NOT imported automatically:**
 
-- **DKIM CNAME records** — must be matched to the correct Terraform index
-  (`ses_dkim[0]`, `[1]`, `[2]`). Import manually if needed.
 - **IAM access keys** — secrets are not recoverable.
 - **Ambiguous resources** — multiple matches found.
 - **Resources with errors** — API check failed.
+
+### Safe DKIM adopt mode
+
+DKIM CNAME records are imported only when all three tokens can be
+unambiguously matched to Cloudflare DNS records:
+
+1. DKIM tokens are obtained from the OpenTofu state (`aws_ses_domain_dkim`)
+   or from the AWS SES API as a fallback.
+2. For each token, a Cloudflare DNS query looks for exactly one matching
+   CNAME record: `{token}._domainkey.{domain}`.
+3. Only if all three tokens have exactly one match each are all three
+   DKIM records imported into the state.
+4. If any token has zero or multiple matches, DKIM adoption is skipped and
+   the user is advised to review manually.
+
+This ensures the correct index pairing between Terraform's
+`ses_dkim[0]`, `[1]`, `[2]` and the Cloudflare DNS records.
 
 **How to use:**
 1. Open `/dashboard/setup/iac`.
