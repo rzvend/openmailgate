@@ -17,7 +17,10 @@ def is_placeholder(value):
     """Return True if *value* is a known placeholder that should be treated as unset."""
     if not value:
         return True
-    v = value.strip().lower().replace("-", "_").replace(" ", "_")
+    v = value.strip().lower()
+    if v.startswith("#") or "e.g." in v or "example.com" in v:
+        return True
+    v = v.replace("-", "_").replace(" ", "_")
     return v in _PLACEHOLDER_VALUES or "change_me" in v or "fill_me" in v
 
 
