@@ -94,6 +94,37 @@ Already included in the default compose file. If you use a private network, VPN,
 
 ---
 
+## 3b. Pre-apply conflict detection
+
+The dashboard can detect resources that already exist in AWS/Cloudflare but
+are not tracked in the current OpenTofu state. This helps prevent `AlreadyExists`
+errors before running `apply`.
+
+**How it works:**
+1. The expected resource names are computed from the current configuration.
+2. `tofu state list` shows which resources are already tracked.
+3. AWS and Cloudflare APIs are queried to check if resources exist remotely.
+4. If a resource exists remotely but is not in the state, it is flagged as
+   `exists_outside_state`.
+
+**Use from the dashboard:**
+1. Open `/dashboard/setup/iac`.
+2. Click **Check conflicts**.
+3. Review the conflict table.
+4. If any resource shows `outside state`, the Apply button is blocked.
+
+**Status meanings:**
+- `ok` — resource is tracked and exists remotely.
+- `missing` — resource is neither in state nor exists remotely (safe to create).
+- `exists_outside_state` — exists remotely but NOT in state (apply would fail with AlreadyExists).
+- `ambiguous` — multiple matching resources found (review manually).
+- `error` — API check failed (re-run or check credentials).
+
+**Next step**: If conflicts are found, use the guided import/adopt recovery flow,
+change resource names, or clean up the existing resources manually.
+
+---
+
 ## 4. Resource already exists outside state
 
 **Symptoms:**

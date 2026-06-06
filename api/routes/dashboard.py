@@ -14,6 +14,7 @@ import worker.dovecot_users as du
 
 from api.auth import require_login
 from config import DB_PATH, DOVECOT_USERS_FILE, IMAP_BIND, IMAP_PORT, MAILDIR_BASE, S3_BUCKET, S3_PROCESSED_PREFIX, SMTP_BIND, SMTP_PORT
+from api.iac_recovery import detect_preapply_conflicts
 from database import (
     clear_catch_all_mailbox,
     clear_inbound_archive_mailbox,
@@ -900,13 +901,29 @@ def setup_iac_state(request: Request):
     return _render_iac(request, tool, workdir, output=output, error=None)
 
 
-def _render_iac(request, tool, workdir, output, error, hint=None, plan_summary=None):
+@router.post("/dashboard/setup/iac/conflicts")
+def setup_iac_conflicts(request: Request):
+    """Detect resources that exist remotely but are not in tofu state."""
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    try:
+        conflicts = detect_preapply_conflicts()
+    except Exception as e:
+        return _render_iac(request, tool, workdir, output=None,
+                           error=f"Conflict detection failed: {e}")
+    return _render_iac(request, tool, workdir, output=None, error=None, conflicts=conflicts)
+
+
+def _render_iac(request, tool, workdir, output, error, hint=None, plan_summary=None, conflicts=None):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
     return request.app.state.templates.TemplateResponse(
         request, "setup_iac.html",
         {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
-         "output": output, "error": error, "hint": hint, "plan_summary": plan_summary}
+         "output": output, "error": error, "hint": hint, "plan_summary": plan_summary,
+         "conflicts": conflicts}
     )
 
 

@@ -66,7 +66,55 @@
 </div>
 {% endif %}
 
+{% if conflicts %}
+{% set has_blocking = conflicts | selectattr('status', 'equalto', 'exists_outside_state') | list | length %}
+{% set has_ambiguous = conflicts | selectattr('status', 'equalto', 'ambiguous') | list | length %}
+{% set has_error = conflicts | selectattr('status', 'equalto', 'error') | list | length %}
+<div class="card" style="margin-top: 16px; background: {% if has_blocking > 0 %}#fff3cd{% else %}#d4edda{% endif %};">
+    <h3>Pre-apply Conflict Detection</h3>
+    {% if has_blocking > 0 %}
+    <p style="color: #c0392b;"><strong>Apply blocked.</strong> Some resources already exist outside OpenTofu state. Running apply may fail with AlreadyExists.</p>
+    <p>Use the recovery section below, choose new unique names, or clean up the existing resources.</p>
+    {% else %}
+    <p>No blocking conflicts detected. All expected resources either exist in state or do not exist remotely.</p>
+    {% endif %}
+
+    <table style="margin-top: 8px;">
+        <thead><tr><th>Resource</th><th>Provider</th><th>Expected Name</th><th>In State</th><th>Remote</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for c in conflicts %}
+        <tr>
+            <td><code>{{ c.resource }}</code></td>
+            <td>{{ c.provider }}</td>
+            <td>{{ c.expected_name }}</td>
+            <td>{{ 'yes' if c.in_state else 'no' }}</td>
+            <td>{{ 'yes' if c.remote_exists else 'no' }}</td>
+            <td>
+                {% if c.status == 'ok' %}
+                <span class="badge badge-active">ok</span>
+                {% elif c.status == 'exists_outside_state' %}
+                <span class="badge badge-inactive" style="color: #c0392b;">outside state</span>
+                {% elif c.status == 'ambiguous' %}
+                <span class="badge badge-fallback">ambiguous</span>
+                {% elif c.status == 'error' %}
+                <span class="badge badge-inactive">error</span>
+                {% else %}
+                <span class="badge badge-fallback">{{ c.status }}</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <form method="post" action="/dashboard/setup/iac/conflicts" style="margin-top: 8px; display: inline;">
+        <button type="submit" style="padding: 8px 20px; background: #e67e22; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Check conflicts</button>
+    </form>
+</div>
+{% endif %}
+
 <h2 style="margin-top: 24px;">Apply</h2>
+{% if not conflicts or has_blocking == 0 %}
 <div class="card" style="background: #f8d7da; border: 1px solid #e74c3c;">
     <p><strong>WARNING: apply will create or update real cloud resources.</strong></p>
     <p>This automation is alpha. Review the plan before applying.</p>
@@ -80,6 +128,13 @@
         <button type="submit" style="padding: 8px 20px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Run apply</button>
     </form>
 </div>
+{% else %}
+<div class="card" style="background: #fff3cd; border: 1px solid #f39c12;">
+    <p><strong>Apply is blocked.</strong></p>
+    <p>Resources exist outside the OpenTofu state. Running apply may fail.</p>
+    <p>Resolve conflicts first — use <em>Check conflicts</em> above for details.</p>
+</div>
+{% endif %}
 
 <h2 style="margin-top: 24px;">Manual Mode</h2>
 <div class="card">
