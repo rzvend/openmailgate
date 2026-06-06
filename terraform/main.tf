@@ -94,7 +94,7 @@ resource "aws_ses_domain_identity" "domain" {
 }
 
 resource "aws_ses_receipt_rule_set" "main" {
-  rule_set_name = "ses-s3-mailbox-rules"
+  rule_set_name = var.rule_set_name
 }
 
 resource "aws_ses_active_receipt_rule_set" "main" {
@@ -102,7 +102,7 @@ resource "aws_ses_active_receipt_rule_set" "main" {
 }
 
 resource "aws_ses_receipt_rule" "store_in_s3" {
-  name          = "store-in-s3"
+  name          = var.receipt_rule_name
   rule_set_name = aws_ses_receipt_rule_set.main.rule_set_name
   recipients    = [var.domain]
   enabled       = true

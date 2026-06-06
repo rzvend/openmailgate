@@ -758,6 +758,43 @@ def classify_iac_error(log_text: str) -> dict | None:
     return None
 
 
+# ── Resource suffix for unique Terraform naming ──────────────────────────
+
+
+def _ensure_resource_suffix():
+    """Generate and persist a unique resource suffix, or return existing one."""
+    state_dir = Path(_os.getenv("IAC_STATE_DIR", "/app/state/iac"))
+    suffix_file = state_dir / "resource_suffix"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    if suffix_file.exists():
+        return suffix_file.read_text().strip()
+    import secrets
+    suffix = secrets.token_hex(4)  # 8 hex chars
+    suffix_file.write_text(suffix)
+    return suffix
+
+
+def _iac_resource_names():
+    """Return dict of Terraform resource names with unique suffix."""
+    suffix = _ensure_resource_suffix()
+    return {
+        "resource_suffix": suffix,
+        "mail_bucket_name": _os.getenv("S3_BUCKET") or f"ses-openmailgate-{suffix}-mailbox",
+        "sqs_queue_name": _os.getenv("SQS_QUEUE_NAME") or f"ses-openmailgate-{suffix}-incoming",
+        "rule_set_name": _os.getenv("SES_RULE_SET") or f"ses-s3-mailbox-{suffix}-rules",
+        "receipt_rule_name": f"store-in-s3-{suffix}",
+        "smtp_iam_user": _os.getenv("SMTP_IAM_USER") or f"ses-s3-mailbox-{suffix}-smtp",
+    }
+
+
+def _iac_env_with_suffix(base_env=None):
+    """Build an env dict with TF_VAR_* set for all resource names."""
+    env = dict(base_env or _os.environ)
+    for name, value in _iac_resource_names().items():
+        env[f"TF_VAR_{name}"] = value
+    return env
+
+
 @router.get("/dashboard/setup/iac")
 def setup_iac_page(request: Request):
     _auth = require_login(request)
@@ -766,10 +803,11 @@ def setup_iac_page(request: Request):
     workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")
+    names = _iac_resource_names()
     return request.app.state.templates.TemplateResponse(
         request, "setup_iac.html",
         {"tool": tool, "workdir": workdir, "state_dir": state_dir, "log_dir": log_dir,
-         "output": None, "error": None}
+         "output": None, "error": None, "resource_names": names}
     )
 
 
@@ -784,7 +822,7 @@ def setup_iac_init(request: Request):
         return _render_iac(request, tool, workdir, output=None,
                            error="Another IAC job is already running.")
     try:
-        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        env = _iac_env_with_suffix({**_os.environ, "TF_IN_AUTOMATION": "true"})
         code, output = _run_iac_command(tool, ["init", "-input=false", "-no-color"], workdir, env)
         hint = classify_iac_error(output) if code != 0 else None
         return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)
@@ -805,7 +843,7 @@ def setup_iac_plan(request: Request):
                            error="Another IAC job is already running.")
     try:
         plan_file = f"{state_dir}/last.tfplan"
-        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        env = _iac_env_with_suffix({**_os.environ, "TF_IN_AUTOMATION": "true"})
         code, output = _run_iac_command(tool, ["plan", "-input=false", "-no-color", "-out", plan_file], workdir, env, timeout=600)
         hint = classify_iac_error(output) if code != 0 else None
         plan_summary = _parse_plan_summary(output) if code == 0 else None
@@ -840,7 +878,7 @@ def setup_iac_apply(
         return _render_iac(request, tool, workdir, output=None,
                            error="Another IAC job is already running.")
     try:
-        env = {**_os.environ, "TF_IN_AUTOMATION": "true"}
+        env = _iac_env_with_suffix({**_os.environ, "TF_IN_AUTOMATION": "true"})
         code, output = _run_iac_command(tool, ["apply", "-input=false", "-no-color", plan_file], workdir, env, timeout=600)
         hint = classify_iac_error(output) if code != 0 else None
         return _render_iac(request, tool, workdir, output=output, error=None, hint=hint)

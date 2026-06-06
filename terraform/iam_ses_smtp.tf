@@ -7,7 +7,7 @@
 #   SES_SMTP_PASSWORD=<output>
 
 resource "aws_iam_user" "ses_smtp_sender" {
-  name = "ses-s3-mailbox-smtp-sender"
+  name = var.smtp_iam_user
 }
 
 resource "aws_iam_user_policy" "ses_smtp_sender_policy" {
