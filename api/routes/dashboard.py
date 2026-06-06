@@ -848,6 +848,20 @@ def setup_iac_apply(
         _release_iac_lock(lock)
 
 
+@router.post("/dashboard/setup/iac/state")
+def setup_iac_state(request: Request):
+    """Show current OpenTofu state list for recovery inspection."""
+    _auth = require_login(request)
+    if _auth: return _auth
+    tool = _os.getenv("IAC_TOOL", "tofu")
+    workdir = _os.getenv("IAC_WORKDIR", "/app/iac")
+    code, output = _run_iac_command(tool, ["state", "list"], workdir, _os.environ)
+    if code != 0:
+        return _render_iac(request, tool, workdir, output=None,
+                           error=f"State command failed (exit {code}). Output: {output[:300]}")
+    return _render_iac(request, tool, workdir, output=output, error=None)
+
+
 def _render_iac(request, tool, workdir, output, error, hint=None, plan_summary=None):
     state_dir = _os.getenv("IAC_STATE_DIR", "/app/state/iac")
     log_dir = _os.getenv("IAC_LOG_DIR", "/app/logs/setup")

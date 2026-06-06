@@ -171,6 +171,50 @@ docker compose exec api sh -lc 'cd /app/iac && tofu import aws_ses_receipt_rule_
 
 Then run plan again. It should now show only the missing resources.
 
+### 4b. Recovering from a partial apply
+
+**Symptoms:** Some resources were created by a previous `tofu apply` that failed
+midway. The state file tracks only the resources that were fully applied.
+Running apply again fails with `AlreadyExists` or `EntityAlreadyExists` for
+resources that already exist in AWS/Cloudflare but are not in the state.
+
+**Do not delete resources blindly.** S3 buckets, SES receipt rule sets, and DNS
+records may already be in use and referenced by other services.
+
+**Recovery flow:**
+
+1. Check what is already tracked in the state:
+   ```bash
+   docker compose exec api sh -lc 'cd /app/iac && tofu state list'
+   ```
+
+2. Import each missing resource into the state. Examples:
+   ```bash
+   # IAM user for SMTP
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_iam_user.ses_smtp_sender ses-s3-mailbox-smtp-sender'
+
+   # SES receipt rule set
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_ses_receipt_rule_set.main ses-s3-mailbox-rules'
+
+   # S3 bucket (adjust name for your setup)
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_s3_bucket.mail_bucket ses-openmailgate-mailbox'
+
+   # SQS queue
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_sqs_queue.mail_queue ses-openmailgate-incoming'
+
+   # Cloudflare DNS records require the record ID from the Cloudflare API
+   ```
+
+3. Run plan again to verify that only the truly missing resources are shown:
+   ```bash
+   docker compose exec api sh -lc 'cd /app/iac && tofu plan -var="domain=..." -var="mail_bucket_name=..." -var="sqs_queue_name=..."'
+   ```
+
+4. Only apply when the plan shows no unexpected destroys and a safe number of additions.
+
+You can also use the **Show state** button on the `/dashboard/setup/iac` page
+to inspect the current state from the dashboard.
+
 ---
 
 ## 5. Access denied / invalid AWS credentials
