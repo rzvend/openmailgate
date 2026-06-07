@@ -2009,9 +2009,12 @@ def about_page(request: Request):
     import os as _os
     support_url = _os.getenv("APP_SUPPORT_URL", "")
     support_label = _os.getenv("APP_SUPPORT_LABEL", "Support")
+    app_name = _os.getenv("APP_NAME", "OpenMailGate")
+    channel = _os.getenv("APP_RELEASE_CHANNEL", "alpha")
     return request.app.state.templates.TemplateResponse(
         request, "about.html",
-        {"version": APP_VERSION, "support_url": support_url, "support_label": support_label}
+        {"version": APP_VERSION, "support_url": support_url, "support_label": support_label,
+         "app_name": app_name, "channel": channel}
     )
 
 
