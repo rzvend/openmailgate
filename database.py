@@ -194,13 +194,14 @@ _DOVECOT_GID = int(os.getenv("DOVECOT_GID", "1000"))
 def ensure_maildir_structure(base_path):
     """Create Maildir directory tree under base_path."""
     dirs = (
+        "",                                                                 # mailbox root
         "cur", "new", "tmp",
-        ".Sent/cur", ".Sent/new", ".Sent/tmp",
-        ".Drafts/cur", ".Drafts/new", ".Drafts/tmp",
-        ".Trash/cur", ".Trash/new", ".Trash/tmp",
-        ".Junk/cur", ".Junk/new", ".Junk/tmp",
-        ".Archive/cur", ".Archive/new", ".Archive/tmp",
-        ".SentDuplicates/cur", ".SentDuplicates/new", ".SentDuplicates/tmp",
+        ".Sent",      ".Sent/cur",      ".Sent/new",      ".Sent/tmp",
+        ".Drafts",    ".Drafts/cur",    ".Drafts/new",    ".Drafts/tmp",
+        ".Trash",     ".Trash/cur",     ".Trash/new",     ".Trash/tmp",
+        ".Junk",      ".Junk/cur",      ".Junk/new",      ".Junk/tmp",
+        ".Archive",   ".Archive/cur",   ".Archive/new",   ".Archive/tmp",
+        ".SentDuplicates", ".SentDuplicates/cur", ".SentDuplicates/new", ".SentDuplicates/tmp",
     )
     for sub in dirs:
         p = (base_path / sub)
