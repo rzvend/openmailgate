@@ -42,13 +42,13 @@ Catch-all receives messages sent to unknown or inactive addresses. Set via `/das
 
 | Setting | Value |
 |---|---|
-| IMAP Server | `10.10.10.16` |
+| IMAP Server | `YOUR_VM_IP` |
 | IMAP Port | `143` |
-| Security | STARTTLS |
+| Security | None (alpha) |
 | Username | Full email address |
 | Password | IMAP password configured in dashboard |
 
-SMTP settings depend on the local SMTP relay configuration (port `2525` by default, no authentication, STARTTLS disabled).
+SMTP settings depend on the local SMTP relay configuration (port `2525` by default, no authentication, None (alpha) disabled).
 
 ## Safety Notes
 

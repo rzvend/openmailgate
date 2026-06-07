@@ -7,11 +7,11 @@ Aprovado com correções aplicadas.
 ## Ambiente validado
 
 - VM limpa: `openmailgate2`
-- IP da VM: `10.10.10.36`
+- IP da VM: `YOUR_VM_IP`
 - Stack Docker Compose
-- API/dashboard: `10.10.10.36:8000`
-- IMAP/Dovecot: `10.10.10.36:143`
-- SMTP sender: `10.10.10.36:2525`
+- API/dashboard: `YOUR_VM_IP:8000`
+- IMAP/Dovecot: `YOUR_VM_IP:143`
+- SMTP sender: `YOUR_VM_IP:2525`
 
 ## Commits aplicados durante a validação
 

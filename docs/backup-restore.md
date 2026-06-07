@@ -7,7 +7,7 @@
 | SQLite database | `data/mailbox.db` | All mailboxes, messages, settings, operators |
 | Maildir | `data/maildir/` | All email content |
 | Raw emails | `data/raw-emails/` `data/raw-outbound/` | Inbound and outbound raw copies |
-| Terraform state | `terraform/*.tfstate` or volume `iac_state` | Cloud infrastructure state — essential for future applies |
+| OpenTofu state | `terraform/*.tfstate` or volume `iac_state` | Cloud infrastructure state — essential for future applies |
 | Environment | `.env` | AWS keys, Cloudflare token, SMTP credentials — protect carefully |
 | Dovecot users | `/etc/dovecot/users` | Virtual IMAP users (host file) |
 
@@ -51,7 +51,7 @@ tar -xzf ses-s3-backup-YYYYMMDD.tar.gz -C .
 
 # Start services
 docker compose up -d
-docker compose run --rm api python3 worker/migrate.py
+# Migrations run automatically via Docker entrypoint
 ```
 
 ## Dovecot Users (host)
@@ -66,7 +66,7 @@ sudo python3 -m worker.mailbox_admin sync-imap-users --apply
 
 ## Safety
 
-- Backup before running Terraform/OpenTofu apply.
+- Backup before running OpenTofu apply.
 - Backup before upgrading.
 - Store backups outside the project directory.
 - Do not commit backups.

@@ -163,7 +163,7 @@ docker compose exec api sh -lc 'cd /app/iac && tofu import aws_ses_receipt_rule_
 
 Then run plan again to confirm it is safe:
 ```bash
-docker compose exec api sh -lc 'cd /app/iac && tofu plan -var="domain=openmailgate.ricardo.vc" -var="mail_bucket_name=ses-openmailgate-mailbox" -var="sqs_queue_name=ses-openmailgate-incoming"'
+docker compose exec api sh -lc 'cd /app/iac && tofu plan -var="domain=alpha.example.com" -var="mail_bucket_name=openmailgate-example-mailbox" -var="sqs_queue_name=openmailgate-example-incoming"'
 ```
 
 Only apply if the plan shows:
@@ -228,10 +228,10 @@ records may already be in use and referenced by other services.
    docker compose exec api sh -lc 'cd /app/iac && tofu import aws_ses_receipt_rule_set.main ses-s3-mailbox-rules'
 
    # S3 bucket (adjust name for your setup)
-   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_s3_bucket.mail_bucket ses-openmailgate-mailbox'
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_s3_bucket.mail_bucket openmailgate-example-mailbox'
 
    # SQS queue
-   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_sqs_queue.mail_queue ses-openmailgate-incoming'
+   docker compose exec api sh -lc 'cd /app/iac && tofu import aws_sqs_queue.mail_queue openmailgate-example-incoming'
 
    # Cloudflare DNS records require the record ID from the Cloudflare API
    ```

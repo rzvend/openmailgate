@@ -16,13 +16,13 @@ O objetivo principal era validar se os dois bloqueadores identificados na G.2.6 
 ## Domínio validado
 
 ```text
-boto.ricardo.vc
+rc.example.com
 ```
 
 Custom MAIL FROM esperado:
 
 ```text
-mail.boto.ricardo.vc
+mail.rc.example.com
 ```
 
 ## Ambiente
@@ -67,15 +67,15 @@ cp .env.example .env
 O domínio configurado foi:
 
 ```text
-MAIL_DOMAIN=boto.ricardo.vc
+MAIL_DOMAIN=rc.example.com
 ```
 
 Os binds foram configurados para a VM:
 
 ```text
-API_BIND=10.10.10.56
-IMAP_BIND=10.10.10.56
-SMTP_BIND=10.10.10.56
+API_BIND=YOUR_VM_IP
+IMAP_BIND=YOUR_VM_IP
+SMTP_BIND=YOUR_VM_IP
 ```
 
 No início, os campos abaixo permaneceram como placeholders ou vazios, conforme esperado:
@@ -102,10 +102,10 @@ foi executado com sucesso.
 Pontos validados:
 
 ```text
-MAIL_DOMAIN=boto.ricardo.vc
-API_BIND=10.10.10.56
-IMAP_BIND=10.10.10.56
-SMTP_BIND=10.10.10.56
+MAIL_DOMAIN=rc.example.com
+API_BIND=YOUR_VM_IP
+IMAP_BIND=YOUR_VM_IP
+SMTP_BIND=YOUR_VM_IP
 Sem warning de version obsoleto
 Sem erro de renderização do Compose
 ```
@@ -173,13 +173,13 @@ Recursos planejados:
 Domínio planejado:
 
 ```text
-boto.ricardo.vc
+rc.example.com
 ```
 
 Custom MAIL FROM planejado:
 
 ```text
-mail.boto.ricardo.vc
+mail.rc.example.com
 ```
 
 Bucket planejado:
@@ -203,7 +203,7 @@ store-in-s3-88d29e9a
 Rule set planejado:
 
 ```text
-ses-s3-mailbox-88d29e9a-rules
+openmailgate-example-rules
 ```
 
 ## Validação do bug G.2.6a
@@ -231,8 +231,8 @@ aws_ses_domain_mail_from.this
 foi planejado para:
 
 ```text
-domain = "boto.ricardo.vc"
-mail_from_domain = "mail.boto.ricardo.vc"
+domain = "rc.example.com"
+mail_from_domain = "mail.rc.example.com"
 ```
 
 Resultado:
@@ -342,8 +342,8 @@ G.2.6b validado em instalação limpa final.
 Foi configurado Thunderbird com:
 
 ```text
-IMAP: 10.10.10.56:143
-SMTP: 10.10.10.56:2525
+IMAP: YOUR_VM_IP:143
+SMTP: YOUR_VM_IP:2525
 ```
 
 O envio real foi realizado com sucesso.

@@ -9,7 +9,7 @@ Data: 2026-06-07
 Validar uma instalação limpa do OpenMailGate após as correções anteriores do fluxo Docker/dashboard/OpenTofu, usando o domínio:
 
 ```text
-alpha.ricardo.vc
+alpha.example.com
 ```
 
 O objetivo era confirmar se o projeto já conseguia sair de uma VM limpa até um ciclo real de envio e recebimento de e-mail, usando:
@@ -67,7 +67,7 @@ Plan: 22 to add, 0 to change, 0 to destroy.
 O domínio estava correto:
 
 ```text
-alpha.ricardo.vc
+alpha.example.com
 ```
 
 Os recursos planejados incluíam:
@@ -153,13 +153,13 @@ Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
 O Custom MAIL FROM foi validado:
 
 ```text
-custom_mail_from_domain = "mail.alpha.ricardo.vc"
+custom_mail_from_domain = "mail.alpha.example.com"
 ```
 
 A validação pós-apply mostrou:
 
 ```text
-SES | MAIL FROM | ok | mail.alpha.ricardo.vc
+SES | MAIL FROM | ok | mail.alpha.example.com
 DNS | MAIL FROM MX | ok | found
 DNS | MAIL FROM SPF | ok | found
 ```
@@ -238,7 +238,7 @@ Não bloqueia alpha, mas deve documentar/refinar posteriormente.
 Após criar a primeira mailbox pelo dashboard:
 
 ```text
-ricardo@alpha.ricardo.vc
+user@alpha.example.com
 ```
 
 o dashboard escreveu o usuário em:

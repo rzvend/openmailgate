@@ -1,3 +1,5 @@
+> **Historical document.** This file records an earlier planning/implementation phase and may not represent the current v0.1.0-alpha deployment flow. For current installation instructions, use `README.md` and `docs/deploy-docker.md`.
+
 # Docker Base Setup (G.1)
 
 This is the initial Docker Compose setup for `ses-s3-mailbox`. It containerizes the three core Python services: API/dashboard, SQS worker, and SMTP sender.
