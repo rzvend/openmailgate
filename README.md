@@ -959,6 +959,7 @@ Documentos úteis:
 
 ```text
 docs/deploy-docker.md
+docs/security-alpha.md
 docs/operations.md
 docs/backup-restore.md
 docs/s3-lifecycle.md
