@@ -958,6 +958,8 @@ Useful documents:
 Documentos úteis:
 
 ```text
+CHANGELOG.md
+docs/release-notes-v0.1.0-alpha.md
 docs/deploy-docker.md
 docs/security-alpha.md
 docs/test-triage-alpha.md
