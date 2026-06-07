@@ -27,3 +27,7 @@ output "ses_smtp_password" {
 output "ses_dkim_tokens" {
   value = aws_ses_domain_dkim.domain.dkim_tokens
 }
+
+output "custom_mail_from_domain" {
+  value = local.effective_custom_mail_from_domain
+}

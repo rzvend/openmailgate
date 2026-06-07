@@ -29,3 +29,9 @@ variable "smtp_iam_user" {
 variable "cloudflare_zone_id" {
   default = "02374416228efbe4b59fc547d0ce0e77"
 }
+
+variable "custom_mail_from_domain" {
+  description = "Custom MAIL FROM domain for Amazon SES. Defaults to mail.<domain>."
+  type        = string
+  default     = ""
+}

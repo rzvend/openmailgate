@@ -807,6 +807,7 @@ def _iac_resource_names():
     return {
         "resource_suffix": suffix,
         "domain": iac_mail_domain(),
+        "custom_mail_from_domain": _os.getenv("CUSTOM_MAIL_FROM_DOMAIN") or f"mail.{iac_mail_domain()}",
         "mail_bucket_name": _env_or_auto("S3_BUCKET",
             lambda: f"ses-openmailgate-{suffix}-mailbox"),
         "sqs_queue_name": _env_or_auto("SQS_QUEUE_NAME",
@@ -1138,6 +1139,63 @@ def _run_setup_checks():
         except Exception as e:
             msg = str(e).split(":")[-1].strip()
             results.append({"group": "SES", "name": "DKIM", "status": "error", "detail": msg})
+
+    # ── SES Custom MAIL FROM ────────────────────────────────────────────
+    if mail_domain:
+        custom_mf = _os.getenv("CUSTOM_MAIL_FROM_DOMAIN") or f"mail.{mail_domain}"
+        try:
+            ses = boto3.client("ses", region_name=region or "us-east-1")
+            mf_resp = ses.get_identity_mail_from_domain_attributes(Identities=[mail_domain])
+            mf_attrs = mf_resp.get("MailFromDomainAttributes", {}).get(mail_domain, {})
+            mf_configured = mf_attrs.get("MailFromDomain", "")
+            mf_status = mf_attrs.get("MailFromDomainStatus", "unknown")
+            if mf_configured == custom_mf and mf_status == "Success":
+                results.append({"group": "SES", "name": "MAIL FROM", "status": "ok",
+                                "detail": mf_configured})
+            elif mf_configured and mf_configured != custom_mf:
+                results.append({"group": "SES", "name": "MAIL FROM", "status": "warning",
+                                "detail": f"configured as {mf_configured}, expected {custom_mf}"})
+            else:
+                results.append({"group": "SES", "name": "MAIL FROM", "status": "warning",
+                                "detail": f"not configured (expected {custom_mf})"})
+        except Exception as e:
+            msg = str(e).split(":")[-1].strip()
+            results.append({"group": "SES", "name": "MAIL FROM", "status": "warning", "detail": msg})
+
+        # MAIL FROM MX / SPF in Cloudflare DNS
+        if cf_token and cf_zone:
+            try:
+                import httpx2 as httpx
+                mf_name = custom_mf
+                r = httpx.get(
+                    f"https://api.cloudflare.com/client/v4/zones/{cf_zone}/dns_records"
+                    f"?type=MX&name={mf_name}&per_page=5",
+                    headers={"Authorization": f"Bearer {cf_token}"}, timeout=10,
+                )
+                if r.status_code == 200 and r.json().get("success"):
+                    records = r.json().get("result", [])
+                    has_mf_mx = any("feedback-smtp" in rec.get("content", "") for rec in records)
+                    results.append({"group": "DNS", "name": "MAIL FROM MX",
+                                    "status": "ok" if has_mf_mx else "warning",
+                                    "detail": "found" if has_mf_mx else "missing or invalid"})
+                else:
+                    results.append({"group": "DNS", "name": "MAIL FROM MX", "status": "skipped", "detail": "API error"})
+
+                r2 = httpx.get(
+                    f"https://api.cloudflare.com/client/v4/zones/{cf_zone}/dns_records"
+                    f"?type=TXT&name={mf_name}&per_page=5",
+                    headers={"Authorization": f"Bearer {cf_token}"}, timeout=10,
+                )
+                if r2.status_code == 200 and r2.json().get("success"):
+                    records2 = r2.json().get("result", [])
+                    has_mf_spf = any("include:amazonses.com" in rec.get("content", "") for rec in records2)
+                    results.append({"group": "DNS", "name": "MAIL FROM SPF",
+                                    "status": "ok" if has_mf_spf else "warning",
+                                    "detail": "found" if has_mf_spf else "missing or invalid"})
+                else:
+                    results.append({"group": "DNS", "name": "MAIL FROM SPF", "status": "skipped", "detail": "API error"})
+            except Exception:
+                results.append({"group": "DNS", "name": "MAIL FROM DNS", "status": "skipped", "detail": "Cloudflare API error"})
 
     # ── SES Receipt Rule Set ───────────────────────────────────────────
     try:

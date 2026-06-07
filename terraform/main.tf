@@ -22,6 +22,16 @@ provider "cloudflare" {}
 
 locals {
   mail_prefix = element(split(".", var.domain), 0)
+
+  effective_custom_mail_from_domain = (
+    var.custom_mail_from_domain != null && var.custom_mail_from_domain != ""
+    ? var.custom_mail_from_domain
+    : "mail.${var.domain}"
+  )
+}
+
+data "cloudflare_zone" "this" {
+  zone_id = var.cloudflare_zone_id
 }
 
 resource "aws_s3_bucket" "mail_bucket" {
@@ -146,6 +156,30 @@ resource "cloudflare_dns_record" "ses_dkim" {
   content  = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}.dkim.amazonses.com"
   ttl      = 300
   proxied  = false
+}
+
+# ── Custom MAIL FROM Domain ─────────────────────────────────────────────
+resource "aws_ses_domain_mail_from" "this" {
+  domain           = var.domain
+  mail_from_domain = local.effective_custom_mail_from_domain
+}
+
+resource "cloudflare_dns_record" "mail_from_mx" {
+  zone_id  = var.cloudflare_zone_id
+  name     = replace(local.effective_custom_mail_from_domain, ".${data.cloudflare_zone.this.name}", "")
+  type     = "MX"
+  content  = "feedback-smtp.us-east-1.amazonses.com"
+  priority = 10
+  ttl      = 300
+  proxied  = false
+}
+
+resource "cloudflare_dns_record" "mail_from_spf" {
+  zone_id  = var.cloudflare_zone_id
+  name     = replace(local.effective_custom_mail_from_domain, ".${data.cloudflare_zone.this.name}", "")
+  type     = "TXT"
+  content  = "v=spf1 include:amazonses.com ~all"
+  ttl      = 300
 }
 
 # ── S3 Bucket Notification → SQS (direct, no SNS) ─────────────────────────
