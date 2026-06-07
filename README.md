@@ -477,7 +477,7 @@ docker ps
 ### 2. Clone the repository / Clonar o repositório
 
 ```bash
-git clone https://github.com/YOUR_ORG/openmailgate.git
+git clone https://github.com/rzvend/openmailgate.git
 cd openmailgate
 ```
 

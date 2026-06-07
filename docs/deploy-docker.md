@@ -111,7 +111,7 @@ This will create mail-related DNS records for that domain/subdomain.
 ## 1. Clone the repository
 
 ```bash
-git clone <repo-url> openmailgate
+git clone https://github.com/rzvend/openmailgate.git
 cd openmailgate
 ```
 

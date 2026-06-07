@@ -135,7 +135,7 @@ See `README.md` and `docs/deploy-docker.md` for complete instructions.
 Quick start:
 
 ```bash
-git clone <repository-url> openmailgate
+git clone https://github.com/rzvend/openmailgate.git
 cd openmailgate
 cp .env.example .env
 # Edit .env with your AWS, Cloudflare, and domain settings
