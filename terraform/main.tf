@@ -7,6 +7,11 @@ terraform {
     cloudflare = {
       source = "cloudflare/cloudflare"
     }
+
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 
   backend "local" {
@@ -149,19 +154,25 @@ resource "aws_ses_domain_dkim" "domain" {
 }
 
 resource "cloudflare_dns_record" "ses_dkim" {
-  count    = 3
-  zone_id  = var.cloudflare_zone_id
-  name     = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}._domainkey.${local.mail_prefix}"
-  type     = "CNAME"
-  content  = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}.dkim.amazonses.com"
-  ttl      = 300
-  proxied  = false
+  count   = 3
+  zone_id = var.cloudflare_zone_id
+  name    = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}._domainkey.${local.mail_prefix}"
+  type    = "CNAME"
+  content = "${aws_ses_domain_dkim.domain.dkim_tokens[count.index]}.dkim.amazonses.com"
+  ttl     = 300
+  proxied = false
 }
 
 # ── Custom MAIL FROM Domain ─────────────────────────────────────────────
+resource "time_sleep" "wait_ses_identity" {
+  depends_on      = [aws_ses_domain_identity.domain]
+  create_duration = "20s"
+}
+
 resource "aws_ses_domain_mail_from" "this" {
-  domain           = var.domain
+  domain           = aws_ses_domain_identity.domain.domain
   mail_from_domain = local.effective_custom_mail_from_domain
+  depends_on       = [time_sleep.wait_ses_identity]
 }
 
 resource "cloudflare_dns_record" "mail_from_mx" {
@@ -175,11 +186,11 @@ resource "cloudflare_dns_record" "mail_from_mx" {
 }
 
 resource "cloudflare_dns_record" "mail_from_spf" {
-  zone_id  = var.cloudflare_zone_id
-  name     = replace(local.effective_custom_mail_from_domain, ".${data.cloudflare_zone.this.name}", "")
-  type     = "TXT"
-  content  = "v=spf1 include:amazonses.com ~all"
-  ttl      = 300
+  zone_id = var.cloudflare_zone_id
+  name    = replace(local.effective_custom_mail_from_domain, ".${data.cloudflare_zone.this.name}", "")
+  type    = "TXT"
+  content = "v=spf1 include:amazonses.com ~all"
+  ttl     = 300
 }
 
 # ── S3 Bucket Notification → SQS (direct, no SNS) ─────────────────────────
