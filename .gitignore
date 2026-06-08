@@ -17,3 +17,7 @@ backups/
 *.log
 *.eml
 dovecot/users
+
+# Runtime/raw email files
+data/raw-emails/*
+!data/raw-emails/.gitkeep
